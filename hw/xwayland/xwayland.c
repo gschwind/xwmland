@@ -180,11 +180,12 @@ xwl_pixmap_get(PixmapPtr pixmap)
 static void
 send_surface_id_event(struct xwl_window *xwl_window)
 {
-	LogWrite(0, "send surface id for %d\n", xwl_window->window->drawable.id);
     static const char atom_name[] = "WL_SURFACE_ID";
-    static Atom type_atom;
+    static Atom type_atom = None;
     DeviceIntPtr dev;
     xEvent e;
+
+	LogWrite(0, "send surface id for %d\n", xwl_window->window->drawable.id);
 
     if (type_atom == None)
         type_atom = MakeAtom(atom_name, strlen(atom_name), TRUE);
@@ -252,7 +253,7 @@ xwl_realize_window(WindowPtr window)
             return ret;
     }
 
-    pthread_mutex_lock(&(xwl_screen->window_hash));
+    pthread_mutex_lock(&(xwl_screen->window_hash_lock));
 	LogWrite(0, "create xwl_window for %d\n", window->drawable.id);
     xwl_window = calloc(sizeof *xwl_window, 1);
     xwl_window->xwl_screen = xwl_screen;
@@ -263,7 +264,7 @@ xwl_realize_window(WindowPtr window)
     pthread_mutex_init(&xwl_window->lock, NULL);
 
     if (xwl_window->surface == NULL) {
-        pthread_mutex_unlock(&(xwl_screen->window_hash));
+        pthread_mutex_unlock(&(xwl_screen->window_hash_lock));
         ErrorF("wl_display_create_surface failed\n");
         return FALSE;
     }
@@ -281,10 +282,9 @@ xwl_realize_window(WindowPtr window)
     DamageSetReportAfterOp(xwl_window->damage, TRUE);
 
     xorg_list_init(&xwl_window->link_damage);
-
     hash_table_insert(xwl_screen->window_hash, xwl_window->window->drawable.id, xwl_window);
+    pthread_mutex_unlock(&(xwl_screen->window_hash_lock));
     send_surface_id_event(xwl_window);
-    pthread_mutex_unlock(&(xwl_screen->window_hash));
     return ret;
 }
 
@@ -325,6 +325,9 @@ xwl_unrealize_window(WindowPtr window)
     pthread_mutex_unlock(&(xwl_screen->window_hash_lock));
     pthread_mutex_unlock(&(xwl_window->lock));
     pthread_mutex_destroy(&(xwl_window->lock));
+
+    if(xwl_window->shell_surface)
+    	wl_shell_surface_destroy(xwl_window->shell_surface);
 
     wl_surface_destroy(xwl_window->surface);
     if (RegionNotEmpty(DamageRegion(xwl_window->damage)))
@@ -367,7 +370,7 @@ xwl_screen_post_damage(struct xwl_screen *xwl_screen)
     struct wl_buffer *buffer;
     PixmapPtr pixmap;
 
-    LogWrite(0, "process damages\n");
+    //LogWrite(0, "process damages\n");
     xorg_list_for_each_entry_safe(xwl_window, next_xwl_window,
                                   &xwl_screen->damage_window_list, link_damage) {
 
@@ -760,11 +763,11 @@ InitOutput(ScreenInfo * screen_info, int argc, char **argv)
 
 struct xwl_window * xwl_screen_lock_window(struct xwl_screen *xwl_screen, uint32_t id) {
 	struct xwl_window * xwl_window = NULL;
-	pthread_mutex_lock(&(xwl_screen->window_hash));
+	pthread_mutex_lock(&(xwl_screen->window_hash_lock));
 	xwl_window = hash_table_lookup(xwl_screen->window_hash, id);
 	if(xwl_window)
 		pthread_mutex_lock(&(xwl_window->lock));
-	pthread_mutex_unlock(&(xwl_screen->window_hash));
+	pthread_mutex_unlock(&(xwl_screen->window_hash_lock));
 	return xwl_window;
 }
 
