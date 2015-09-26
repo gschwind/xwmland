@@ -23,6 +23,8 @@
 #include <dix-config.h>
 #include <dix.h>
 
+#include "cairo-util.h"
+
 /**
  * Compile-time computation of number of items in a hardcoded array.
  *

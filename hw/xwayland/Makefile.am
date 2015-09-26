@@ -14,10 +14,10 @@ Xwayland_SOURCES =				\
 	xwm/window-manager.c		\
 	xwm/selection.c			\
 	xwm/dnd.c				\
-	xwm/frame.c				\
-	xwm/cairo-util.c				\
 	xwm/launcher.c			\
 	xwm/hash.c				\
+	frame.c				\
+	cairo-util.c				\
 	wm.c				\
 	xwayland.c				\
 	xwayland-input.c			\

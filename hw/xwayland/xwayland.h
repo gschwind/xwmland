@@ -112,6 +112,8 @@ struct xwl_window {
     struct xwl_screen *xwl_screen;
     struct wl_surface *surface;
     struct wl_shell_surface *shell_surface;
+    struct frame * frame;
+
     WindowPtr frame_window;
     WindowPtr window;
     DamagePtr damage;

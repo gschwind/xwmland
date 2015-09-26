@@ -143,6 +143,8 @@ window_manager_create(ScreenPtr screen)
 	window_manager_get_resources(wm);
 	window_manager_get_visual_and_colormap(wm);
 
+	wm->theme = theme_create();
+
 	return wm;
 }
 

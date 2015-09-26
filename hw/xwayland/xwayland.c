@@ -359,9 +359,20 @@ xwl_realize_window(WindowPtr window)
     if(CLIENT_ID(window->drawable.id) != 0 && !xwl_window) {
     	XID values[4];
     	int err = 0;
-    	WindowPtr frame;
+    	int x, y;
+
+		/* register this window */
+		LogWrite(0, "create xwl_window for %d\n", window->drawable.id);
+		xwl_window = calloc(sizeof *xwl_window, 1);
 
     	LogWrite(0, "external client %d\n", window->drawable.id);
+
+    	xwl_window->frame = frame_create(xwl_screen->wm->theme,
+    			window->drawable.width,
+				window->drawable.height, 0, "title");
+
+    	frame_resize_inside(xwl_window->frame, window->drawable.width, window->drawable.height);
+    	frame_interior(xwl_window->frame, &x, &y, NULL, NULL);
 
     	xGetWindowAttributesReply attr;
     	GetWindowAttributes(window, serverClient, &attr);
@@ -384,35 +395,39 @@ xwl_realize_window(WindowPtr window)
 
 			values[3] = xwl_screen->wm->colormap_id;
 
-			frame = CreateWindow(FakeClientID(0), screen->root,
+			xwl_window->frame_window = CreateWindow(FakeClientID(0), screen->root,
 					0, 0,
-					window->drawable.width+20,
-					window->drawable.height+20,
+					frame_width(xwl_window->frame),
+					frame_height(xwl_window->frame),
 					0, InputOutput,
 					CWBackPixel|CWBorderPixel|CWEventMask|CWColormap, values,
 					32, serverClient, xwl_screen->wm->visual->vid, &err);
 
-			LogWrite(0, "Frame = %p, err = %d\n", frame, err);
+			LogWrite(0, "Frame = %p, err = %d\n", xwl_window->frame_window, err);
 
-			/* register this window */
-			LogWrite(0, "create xwl_window for %d\n", window->drawable.id);
-			xwl_window = calloc(sizeof *xwl_window, 1);
+
 			xwl_window->xwl_screen = xwl_screen;
-			xwl_window->frame_window = frame;
 			xwl_window->window = window;
 			xwl_window->surface = NULL;
 			xwl_window->shell_surface = NULL;
 
-			ReparentWindow(window, frame, 10, 10, serverClient);
+			ReparentWindow(window, xwl_window->frame_window, x, y, serverClient);
 			MapWindow(window, serverClient);
 
 			hash_table_insert(xwl_screen->window_hash, window->drawable.id, xwl_window);
-			hash_table_insert(xwl_screen->window_hash, frame->drawable.id, xwl_window);
+			hash_table_insert(xwl_screen->window_hash, xwl_window->frame_window->drawable.id, xwl_window);
 
-			MapWindow(frame, serverClient);
+			MapWindow(xwl_window->frame_window, serverClient);
 
     	}
 	} else if (xwl_window && !xwl_window->surface) {
+		cairo_surface_t * sbuff;
+		cairo_surface_t * out;
+		cairo_t * cr;
+		pixman_box16_t * rects;
+		int nrect, i;
+		PixmapPtr pixmap;
+		struct xwl_pixmap * xwl_pixmap;
 
 		LogWrite(0, "internal window %d\n", window->drawable.id);
 
@@ -435,6 +450,24 @@ xwl_realize_window(WindowPtr window)
 			return ret;
 		}
 
+		sbuff = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, frame_width(xwl_window->frame), frame_height(xwl_window->frame));
+		cr = cairo_create(sbuff);
+		frame_repaint(xwl_window->frame, cr);
+		cairo_destroy(cr);
+
+		pixmap = (*screen->GetWindowPixmap)(xwl_window->frame_window);
+		xwl_pixmap = xwl_pixmap_get(pixmap);
+
+		out = cairo_image_surface_create_for_data(xwl_pixmap->data, CAIRO_FORMAT_ARGB32, pixmap->drawable.width, pixmap->drawable.height, pixmap->devKind);
+		cr = cairo_create(out);
+		rects = pixman_region_rectangles(&(xwl_window->frame_window->clipList), &nrect);
+		for(i = 0; i < nrect; ++i) {
+			cairo_rectangle(cr, rects[i].x1, rects[i].y1, rects[i].x2 - rects[i].x1, rects[i].y2 - rects[i].y1);
+			cairo_clip(cr);
+			cairo_set_source_surface(cr, sbuff, 0, 0);
+			cairo_paint(cr);
+		}
+		cairo_destroy(cr);
 
 		xwl_window->surface = wl_compositor_create_surface(xwl_screen->compositor);
 		xwl_window->shell_surface = wl_shell_get_shell_surface(xwl_screen->shell, xwl_window->surface);
@@ -511,12 +544,8 @@ xwl_unrealize_window(WindowPtr window)
         return ret;
     }
 
-    pthread_mutex_lock(&(xwl_screen->window_hash_lock));
-    pthread_mutex_lock(&(xwl_window->lock));
     hash_table_remove(xwl_screen->window_hash, xwl_window->window->drawable.id);
-    pthread_mutex_unlock(&(xwl_screen->window_hash_lock));
-    pthread_mutex_unlock(&(xwl_window->lock));
-    pthread_mutex_destroy(&(xwl_window->lock));
+    hash_table_remove(xwl_screen->window_hash, xwl_window->frame_window->drawable.id);
 
     if(xwl_window->shell_surface)
     	wl_shell_surface_destroy(xwl_window->shell_surface);
