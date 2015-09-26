@@ -272,8 +272,9 @@ pointer_handle_motion(void *data, struct wl_pointer *pointer,
     int sy = wl_fixed_to_int(sy_w);
     ValuatorMask mask;
 
-    if (!xwl_seat->focus_window)
+    if (!xwl_seat->focus_window) {
         return;
+    }
 
     dx = xwl_seat->focus_window->window->drawable.x;
     dy = xwl_seat->focus_window->window->drawable.y;
@@ -284,6 +285,7 @@ pointer_handle_motion(void *data, struct wl_pointer *pointer,
 
     QueuePointerEvents(xwl_seat->pointer, MotionNotify, 0,
                        POINTER_ABSOLUTE | POINTER_SCREEN, &mask);
+
 }
 
 static void
@@ -316,6 +318,7 @@ pointer_handle_button(void *data, struct wl_pointer *pointer, uint32_t serial,
     valuator_mask_zero(&mask);
     QueuePointerEvents(xwl_seat->pointer,
                        state ? ButtonPress : ButtonRelease, index, 0, &mask);
+
 }
 
 static void
@@ -341,6 +344,7 @@ pointer_handle_axis(void *data, struct wl_pointer *pointer,
     valuator_mask_zero(&mask);
     valuator_mask_set_double(&mask, index, wl_fixed_to_double(value) / divisor);
     QueuePointerEvents(xwl_seat->pointer, MotionNotify, 0, POINTER_RELATIVE, &mask);
+
 }
 
 static const struct wl_pointer_listener pointer_listener = {
@@ -373,6 +377,7 @@ keyboard_handle_key(void *data, struct wl_keyboard *keyboard, uint32_t serial,
 
     QueueKeyboardEvents(xwl_seat->keyboard,
                         state ? KeyPress : KeyRelease, key + 8);
+
 }
 
 static void
@@ -417,6 +422,7 @@ keyboard_handle_keymap(void *data, struct wl_keyboard *keyboard,
 
  out:
     close(fd);
+
 }
 
 static void
@@ -433,6 +439,7 @@ keyboard_handle_enter(void *data, struct wl_keyboard *keyboard,
     wl_array_copy(&xwl_seat->keys, keys);
     wl_array_for_each(k, &xwl_seat->keys)
         QueueKeyboardEvents(xwl_seat->keyboard, KeyPress, *k + 8);
+
 }
 
 static void
@@ -448,6 +455,7 @@ keyboard_handle_leave(void *data, struct wl_keyboard *keyboard,
         QueueKeyboardEvents(xwl_seat->keyboard, KeyRelease, *k + 8);
 
     xwl_seat->keyboard_focus = NULL;
+
 }
 
 static void
@@ -465,8 +473,9 @@ keyboard_handle_modifiers(void *data, struct wl_keyboard *keyboard,
     /* We don't need any of this while we have keyboard focus since
        the regular key event processing already takes care of setting
        our internal state correctly. */
-    if (xwl_seat->keyboard_focus)
+    if (xwl_seat->keyboard_focus) {
         return;
+    }
 
     for (dev = inputInfo.devices; dev; dev = dev->next) {
         if (dev != xwl_seat->keyboard &&
@@ -494,6 +503,7 @@ keyboard_handle_modifiers(void *data, struct wl_keyboard *keyboard,
         sn.changed = changed;
         XkbSendStateNotify(dev, &sn);
     }
+
 }
 
 static void
@@ -505,8 +515,8 @@ keyboard_handle_repeat_info (void *data, struct wl_keyboard *keyboard,
     XkbControlsPtr ctrl;
 
     if (rate < 0 || delay < 0) {
-	ErrorF("Wrong rate/delay: %d, %d\n", rate, delay);
-	return;
+    	ErrorF("Wrong rate/delay: %d, %d\n", rate, delay);
+    	return;
     }
 
     for (dev = inputInfo.devices; dev; dev = dev->next) {
@@ -524,6 +534,7 @@ keyboard_handle_repeat_info (void *data, struct wl_keyboard *keyboard,
 	} else
 	    XkbSetRepeatKeys(dev, -1, AutoRepeatModeOff);
     }
+
 }
 
 static const struct wl_keyboard_listener keyboard_listener = {
@@ -810,7 +821,6 @@ input_handler(void *data, struct wl_registry *registry, uint32_t id,
               const char *interface, uint32_t version)
 {
     struct xwl_screen *xwl_screen = data;
-
     if (strcmp(interface, "wl_seat") == 0 && version >= 3) {
         create_input_device(xwl_screen, id, version);
         xwl_screen->expecting_event++;
@@ -874,6 +884,12 @@ InitInput(int argc, char *argv[])
     wl_display_roundtrip(xwl_screen->display);
     while (xwl_screen->expecting_event)
         wl_display_roundtrip(xwl_screen->display);
+
+    //AddEnabledDevice(XConnectionNumber(xnestDisplay));
+    //RegisterBlockAndWakeupHandlers(xnestBlockHandler, xnestWakeupHandler, NULL);
+
+    LogWrite(0, "InitInput\n");
+
 }
 
 void

@@ -2447,7 +2447,7 @@ AM_CONDITIONAL(XFAKESERVER, [test "x$KDRIVE" = xyes && test "x$XFAKE" = xyes])
 
 dnl Xwayland DDX
 
-PKG_CHECK_MODULES(XWAYLANDMODULES, [wayland-client >= 1.3.0 libdrm epoxy], [have_xwayland=yes], [have_xwayland=no])
+PKG_CHECK_MODULES(XWAYLANDMODULES, [xcb xcb-render x11 xcursor xcb-composite xcb-xfixes xcb-damage wayland-client >= 1.3.0 libdrm epoxy cairo], [have_xwayland=yes], [have_xwayland=no])
 AC_MSG_CHECKING([whether to build Xwayland DDX])
 if test "x$XWAYLAND" = xauto; then
    XWAYLAND="$have_xwayland"
@@ -2461,7 +2461,7 @@ if test "x$XWAYLAND" = xyes; then
 	fi
 
 	XWAYLAND_LIBS="$FB_LIB $FIXES_LIB $MI_LIB $XEXT_LIB $DBE_LIB $RECORD_LIB $GLX_LIBS $RANDR_LIB $RENDER_LIB $DAMAGE_LIB $DRI3_LIB $PRESENT_LIB $MIEXT_SYNC_LIB $MIEXT_DAMAGE_LIB $MIEXT_SHADOW_LIB $XI_LIB $XKB_LIB $XKB_STUB_LIB $COMPOSITE_LIB $MAIN_LIB $DIX_LIB $OS_LIB"
-	XWAYLAND_SYS_LIBS="$XWAYLANDMODULES_LIBS $GLX_SYS_LIBS"
+	XWAYLAND_SYS_LIBS="$XWAYLANDMODULES_LIBS $GLX_SYS_LIBS -lpthread"
 	AC_SUBST([XWAYLAND_LIBS])
 	AC_SUBST([XWAYLAND_SYS_LIBS])
 

@@ -34,13 +34,6 @@
 #include <string.h>
 #include <stdlib.h>
 
-struct xwl_pixmap {
-    struct wl_buffer *buffer;
-    int fd;
-    void *data;
-    size_t size;
-};
-
 #ifndef HAVE_MKOSTEMP
 static int
 set_cloexec_or_close(int fd)

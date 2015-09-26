@@ -42,7 +42,11 @@
 #include <randrstr.h>
 #include <exevents.h>
 
+#include "xwm/hash.h"
+
 struct xwl_screen {
+	int lock_count;
+
     int width;
     int height;
     int depth;
@@ -66,6 +70,9 @@ struct xwl_screen {
     struct xorg_list output_list;
     struct xorg_list seat_list;
     struct xorg_list damage_window_list;
+
+    pthread_mutex_t window_hash_lock;
+    struct hash_table * window_hash;
 
     int wayland_fd;
     struct wl_display *display;
@@ -95,12 +102,14 @@ struct xwl_screen {
 };
 
 struct xwl_window {
+	pthread_mutex_t lock;
     struct xwl_screen *xwl_screen;
     struct wl_surface *surface;
     struct wl_shell_surface *shell_surface;
     WindowPtr window;
     DamagePtr damage;
     struct xorg_list link_damage;
+    struct xorg_list link_window;
     struct wl_callback *frame_callback;
 };
 
@@ -150,6 +159,13 @@ struct xwl_output {
     Rotation rotation;
 };
 
+struct xwl_pixmap {
+    struct wl_buffer *buffer;
+    int fd;
+    void *data;
+    size_t size;
+};
+
 struct xwl_pixmap;
 
 Bool xwl_screen_init_cursor(struct xwl_screen *xwl_screen);
@@ -188,5 +204,11 @@ Bool xwl_glamor_init(struct xwl_screen *xwl_screen);
 Bool xwl_screen_init_glamor(struct xwl_screen *xwl_screen,
                          uint32_t id, uint32_t version);
 struct wl_buffer *xwl_glamor_pixmap_get_wl_buffer(PixmapPtr pixmap);
+
+struct xwl_window *
+xwl_screen_lock_window(struct xwl_screen *xwl_screen, uint32_t id);
+
+void
+xwl_screen_unlock_window(struct xwl_window * xwl_window);
 
 #endif

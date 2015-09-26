@@ -25,6 +25,7 @@
 
 #include "xwayland.h"
 
+#include <pthread.h>
 #include <stdio.h>
 
 #include <selection.h>
@@ -32,6 +33,8 @@
 #include <misyncshm.h>
 #include <compositeext.h>
 #include <glx_extinit.h>
+
+#include "xwm/xwm.h"
 
 void
 ddxGiveUp(enum ExitCode error)
@@ -177,6 +180,7 @@ xwl_pixmap_get(PixmapPtr pixmap)
 static void
 send_surface_id_event(struct xwl_window *xwl_window)
 {
+	LogWrite(0, "send surface id for %d\n", xwl_window->window->drawable.id);
     static const char atom_name[] = "WL_SURFACE_ID";
     static Atom type_atom;
     DeviceIntPtr dev;
@@ -204,14 +208,17 @@ send_surface_id_event(struct xwl_window *xwl_window)
 static Bool
 xwl_realize_window(WindowPtr window)
 {
-    ScreenPtr screen = window->drawable.pScreen;
+	ScreenPtr screen = window->drawable.pScreen;
     struct xwl_screen *xwl_screen;
     struct xwl_window *xwl_window;
     struct wl_region *region;
     Bool ret;
 
+	LogWrite(0, "xwl_realize_window %d\n", window->drawable.id);
+
     xwl_screen = xwl_screen_get(screen);
 
+    /* call legacy ReleazeWindow */
     screen->RealizeWindow = xwl_screen->RealizeWindow;
     ret = (*screen->RealizeWindow) (window);
     xwl_screen->RealizeWindow = screen->RealizeWindow;
@@ -224,41 +231,44 @@ xwl_realize_window(WindowPtr window)
     }
 
     if (xwl_screen->rootless) {
-        if (window->redirectDraw != RedirectDrawManual)
+        if (window->redirectDraw != RedirectDrawManual) {
+        	LogWrite(0, "unexpected redirect: ");
+        	switch(window->redirectDraw) {
+        	case RedirectDrawNone:
+        		LogWrite(0, "RedirectDrawNone\n");
+        		break;
+        	case RedirectDrawAutomatic:
+        		LogWrite(0, "RedirectDrawAutomatic\n");
+        		break;
+        	case RedirectDrawManual:
+        		LogWrite(0, "RedirectDrawManual\n");
+        		break;
+        	}
             return ret;
+        }
     }
     else {
         if (window->parent)
             return ret;
     }
 
+    pthread_mutex_lock(&(xwl_screen->window_hash));
+	LogWrite(0, "create xwl_window for %d\n", window->drawable.id);
     xwl_window = calloc(sizeof *xwl_window, 1);
     xwl_window->xwl_screen = xwl_screen;
     xwl_window->window = window;
     xwl_window->surface = wl_compositor_create_surface(xwl_screen->compositor);
+    xwl_window->shell_surface = NULL;
+
+    pthread_mutex_init(&xwl_window->lock, NULL);
+
     if (xwl_window->surface == NULL) {
+        pthread_mutex_unlock(&(xwl_screen->window_hash));
         ErrorF("wl_display_create_surface failed\n");
         return FALSE;
     }
 
-    if (!xwl_screen->rootless) {
-        xwl_window->shell_surface =
-            wl_shell_get_shell_surface(xwl_screen->shell, xwl_window->surface);
-        wl_shell_surface_add_listener(xwl_window->shell_surface,
-                                      &shell_surface_listener, xwl_window);
-
-        wl_shell_surface_set_toplevel(xwl_window->shell_surface);
-
-        region = wl_compositor_create_region(xwl_screen->compositor);
-        wl_region_add(region, 0, 0,
-                      window->drawable.width, window->drawable.height);
-        wl_surface_set_opaque_region(xwl_window->surface, region);
-        wl_region_destroy(region);
-    }
-
     wl_display_flush(xwl_screen->display);
-
-    send_surface_id_event(xwl_window);
 
     wl_surface_set_user_data(xwl_window->surface, xwl_window);
 
@@ -272,6 +282,9 @@ xwl_realize_window(WindowPtr window)
 
     xorg_list_init(&xwl_window->link_damage);
 
+    hash_table_insert(xwl_screen->window_hash, xwl_window->window->drawable.id, xwl_window);
+    send_surface_id_event(xwl_window);
+    pthread_mutex_unlock(&(xwl_screen->window_hash));
     return ret;
 }
 
@@ -285,6 +298,8 @@ xwl_unrealize_window(WindowPtr window)
     Bool ret;
 
     xwl_screen = xwl_screen_get(screen);
+
+	LogWrite(0, "xwl_unrealize_window %d\n", window->drawable.id);
 
     xorg_list_for_each_entry(xwl_seat, &xwl_screen->seat_list, link) {
         if (xwl_seat->focus_window && xwl_seat->focus_window->window == window)
@@ -300,8 +315,16 @@ xwl_unrealize_window(WindowPtr window)
 
     xwl_window =
         dixLookupPrivate(&window->devPrivates, &xwl_window_private_key);
-    if (!xwl_window)
+    if (!xwl_window) {
         return ret;
+    }
+
+    pthread_mutex_lock(&(xwl_screen->window_hash_lock));
+    pthread_mutex_lock(&(xwl_window->lock));
+    hash_table_remove(xwl_screen->window_hash, xwl_window->window->drawable.id);
+    pthread_mutex_unlock(&(xwl_screen->window_hash_lock));
+    pthread_mutex_unlock(&(xwl_window->lock));
+    pthread_mutex_destroy(&(xwl_window->lock));
 
     wl_surface_destroy(xwl_window->surface);
     if (RegionNotEmpty(DamageRegion(xwl_window->damage)))
@@ -313,7 +336,6 @@ xwl_unrealize_window(WindowPtr window)
 
     free(xwl_window);
     dixSetPrivate(&window->devPrivates, &xwl_window_private_key, NULL);
-
     return ret;
 }
 
@@ -345,8 +367,10 @@ xwl_screen_post_damage(struct xwl_screen *xwl_screen)
     struct wl_buffer *buffer;
     PixmapPtr pixmap;
 
+    LogWrite(0, "process damages\n");
     xorg_list_for_each_entry_safe(xwl_window, next_xwl_window,
                                   &xwl_screen->damage_window_list, link_damage) {
+
         /* If we're waiting on a frame callback from the server,
          * don't attach a new buffer. */
         if (xwl_window->frame_callback)
@@ -367,10 +391,13 @@ xwl_screen_post_damage(struct xwl_screen *xwl_screen)
         box = RegionExtents(region);
         wl_surface_damage(xwl_window->surface, box->x1, box->y1,
                           box->x2 - box->x1, box->y2 - box->y1);
+    	LogWrite(0, "damage (%d,%d,%d,%d)\n", box->x1, box->y1,
+                          box->x2 - box->x1, box->y2 - box->y1);
 
         xwl_window->frame_callback = wl_surface_frame(xwl_window->surface);
         wl_callback_add_listener(xwl_window->frame_callback, &frame_listener, xwl_window);
 
+        LogWrite(0, "commit (%d)\n", xwl_window->window->drawable.id);
         wl_surface_commit(xwl_window->surface);
         DamageEmpty(xwl_window->damage);
 
@@ -405,6 +432,7 @@ registry_global(void *data, struct wl_registry *registry, uint32_t id,
         xwl_screen_init_glamor(xwl_screen, id, version);
     }
 #endif
+
 }
 
 static void
@@ -448,6 +476,7 @@ wakeup_handler(void *data, int err, void *read_mask)
     ret = wl_display_dispatch_pending(xwl_screen->display);
     if (ret == -1)
         FatalError("failed to dispatch Wayland events: %s\n", strerror(errno));
+
 }
 
 static void
@@ -455,7 +484,6 @@ block_handler(void *data, struct timeval **tv, void *read_mask)
 {
     struct xwl_screen *xwl_screen = data;
     int ret;
-
     xwl_screen_post_damage(xwl_screen);
 
     while (xwl_screen->prepare_read == 0 &&
@@ -471,6 +499,7 @@ block_handler(void *data, struct timeval **tv, void *read_mask)
     ret = wl_display_flush(xwl_screen->display);
     if (ret == -1)
         FatalError("failed to write to XWayland fd: %s\n", strerror(errno));
+
 }
 
 static CARD32
@@ -521,9 +550,12 @@ xwl_screen_init(ScreenPtr pScreen, int argc, char **argv)
     Pixel red_mask, blue_mask, green_mask;
     int ret, bpc, green_bpc, i;
 
+	LogWrite(0, "xwl_screen_init (%s)\n", display);
+
     xwl_screen = calloc(sizeof *xwl_screen, 1);
     if (xwl_screen == NULL)
         return FALSE;
+    xwl_screen->lock_count = 0;
     xwl_screen->wm_fd = -1;
 
     if (!dixRegisterPrivateKey(&xwl_screen_private_key, PRIVATE_SCREEN, 0))
@@ -541,10 +573,7 @@ xwl_screen_init(ScreenPtr pScreen, int argc, char **argv)
 #endif
 
     for (i = 1; i < argc; i++) {
-        if (strcmp(argv[i], "-rootless") == 0) {
-            xwl_screen->rootless = 1;
-        }
-        else if (strcmp(argv[i], "-wm") == 0) {
+    	if (strcmp(argv[i], "-wm") == 0) {
             xwl_screen->wm_fd = atoi(argv[i + 1]);
             i++;
             TimerSet(NULL, 0, 1, add_client_fd, xwl_screen);
@@ -564,6 +593,9 @@ xwl_screen_init(ScreenPtr pScreen, int argc, char **argv)
         }
     }
 
+    /* rootless is mandatory */
+    xwl_screen->rootless = 1;
+
     if (xwl_screen->listen_fd_count > 0) {
         if (xwl_screen->wm_fd >= 0)
             AddCallback(&SelectionCallback, wm_selection_callback, xwl_screen);
@@ -574,6 +606,9 @@ xwl_screen_init(ScreenPtr pScreen, int argc, char **argv)
     xorg_list_init(&xwl_screen->output_list);
     xorg_list_init(&xwl_screen->seat_list);
     xorg_list_init(&xwl_screen->damage_window_list);
+
+    pthread_mutex_init(&(xwl_screen->window_hash_lock), NULL);
+    xwl_screen->window_hash = hash_table_create();
     xwl_screen->depth = 24;
 
     xwl_screen->display = wl_display_connect(NULL);
@@ -662,6 +697,12 @@ xwl_screen_init(ScreenPtr pScreen, int argc, char **argv)
     xwl_screen->CloseScreen = pScreen->CloseScreen;
     pScreen->CloseScreen = xwl_close_screen;
 
+    if(xwl_screen->wm_fd < 0) {
+    	/* start our wm */
+    	weston_wm_create(xwl_screen);
+    }
+
+
     return ret;
 }
 
@@ -687,6 +728,8 @@ InitOutput(ScreenInfo * screen_info, int argc, char **argv)
     int depths[] = { 1, 4, 8, 15, 16, 24, 32 };
     int bpp[] =    { 1, 8, 8, 16, 16, 32, 32 };
     int i;
+
+    LogWrite(0, "InitOutput\n");
 
     for (i = 0; i < ARRAY_SIZE(depths); i++) {
         screen_info->formats[i].depth = depths[i];
@@ -714,3 +757,18 @@ InitOutput(ScreenInfo * screen_info, int argc, char **argv)
 
     LocalAccessScopeUser();
 }
+
+struct xwl_window * xwl_screen_lock_window(struct xwl_screen *xwl_screen, uint32_t id) {
+	struct xwl_window * xwl_window = NULL;
+	pthread_mutex_lock(&(xwl_screen->window_hash));
+	xwl_window = hash_table_lookup(xwl_screen->window_hash, id);
+	if(xwl_window)
+		pthread_mutex_lock(&(xwl_window->lock));
+	pthread_mutex_unlock(&(xwl_screen->window_hash));
+	return xwl_window;
+}
+
+void xwl_screen_unlock_window(struct xwl_window * xwl_window) {
+	pthread_mutex_unlock(&(xwl_window->lock));
+}
+

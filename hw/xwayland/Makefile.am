@@ -10,6 +10,14 @@ Xwayland_CFLAGS =				\
 	$(GBM_CFLAGS)
 
 Xwayland_SOURCES =				\
+	xwm/xwayland.h			\
+	xwm/window-manager.c		\
+	xwm/selection.c			\
+	xwm/dnd.c				\
+	xwm/frame.c				\
+	xwm/cairo-util.c				\
+	xwm/launcher.c			\
+	xwm/hash.c				\
 	xwayland.c				\
 	xwayland-input.c			\
 	xwayland-cursor.c			\
@@ -19,7 +27,8 @@ Xwayland_SOURCES =				\
 	xwayland.h				\
 	$(top_srcdir)/Xext/dpmsstubs.c		\
 	$(top_srcdir)/Xi/stubs.c		\
-	$(top_srcdir)/mi/miinitext.c
+	$(top_srcdir)/mi/miinitext.c \
+	xwm/hash.h				
 
 Xwayland_LDADD =				\
 	$(glamor_lib)				\
