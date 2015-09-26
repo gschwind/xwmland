@@ -42,7 +42,7 @@
 #include <randrstr.h>
 #include <exevents.h>
 
-#include "xwm/hash.h"
+#include "wm.h"
 
 struct xwl_screen {
 	int lock_count;
@@ -99,6 +99,12 @@ struct xwl_screen {
     void *egl_display, *egl_context;
     struct gbm_device *gbm;
     struct glamor_context *glamor_ctx;
+
+    pthread_mutex_t callback_queue_lock;
+    struct xorg_list callback_queue;
+
+    struct window_manager * wm;
+
 };
 
 struct xwl_window {
@@ -106,6 +112,7 @@ struct xwl_window {
     struct xwl_screen *xwl_screen;
     struct wl_surface *surface;
     struct wl_shell_surface *shell_surface;
+    WindowPtr frame_window;
     WindowPtr window;
     DamagePtr damage;
     struct xorg_list link_damage;
@@ -164,6 +171,11 @@ struct xwl_pixmap {
     int fd;
     void *data;
     size_t size;
+};
+
+struct xwl_callable {
+	struct xorg_list link;
+	void (*callback)(struct xwl_callable * ths);
 };
 
 struct xwl_pixmap;

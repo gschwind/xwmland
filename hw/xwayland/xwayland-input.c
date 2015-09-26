@@ -888,6 +888,22 @@ InitInput(int argc, char *argv[])
     //AddEnabledDevice(XConnectionNumber(xnestDisplay));
     //RegisterBlockAndWakeupHandlers(xnestBlockHandler, xnestWakeupHandler, NULL);
 
+
+    xwl_screen->wm = window_manager_create(pScreen);
+
+    {
+    	XID values[8];
+    	values[0] =
+    			SubstructureRedirectMask |
+				SubstructureNotifyMask |
+				PropertyChangeMask;
+
+    	/** TODO: error checking **/
+    	ChangeWindowAttributes(pScreen->root, CWEventMask, values, serverClient);
+    	//compRedirectSubwindows(serverClient, pScreen->root, RedirectDrawManual);
+
+    }
+
     LogWrite(0, "InitInput\n");
 
 }

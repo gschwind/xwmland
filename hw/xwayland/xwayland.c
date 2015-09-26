@@ -34,7 +34,10 @@
 #include <compositeext.h>
 #include <glx_extinit.h>
 
-#include "xwm/xwm.h"
+#include "window.h"
+#include "compint.h"
+
+#include "xwm/hash.h"
 
 void
 ddxGiveUp(enum ExitCode error)
@@ -206,6 +209,121 @@ send_surface_id_event(struct xwl_window *xwl_window)
                           &e, 1, SubstructureRedirectMask, NullGrab);
 }
 
+//static void
+//xwl_screen_create_frame(struct xwl_screen * screen) {
+//
+//extern _X_EXPORT WindowPtr CreateWindow(Window /*wid */ ,
+//                                        WindowPtr /*pParent */ ,
+//                                        int /*x */ ,
+//                                        int /*y */ ,
+//                                        unsigned int /*w */ ,
+//                                        unsigned int /*h */ ,
+//                                        unsigned int /*bw */ ,
+//                                        unsigned int /*class */ ,
+//                                        Mask /*vmask */ ,
+//                                        XID * /*vlist */ ,
+//                                        int /*depth */ ,
+//                                        ClientPtr /*client */ ,
+//                                        VisualID /*visual */ ,
+//                                        int * /*error */ );
+//
+//
+//xcb_create_window(wm->conn,
+//		  32,
+//		  window->frame_id,
+//		  wm->screen->root,
+//		  0, 0,
+//		  width, height,
+//		  0,
+//		  XCB_WINDOW_CLASS_INPUT_OUTPUT,
+//		  wm->visual_id,
+//		  XCB_CW_BORDER_PIXEL |
+//		  XCB_CW_EVENT_MASK |
+//		  XCB_CW_COLORMAP, values);
+//
+//
+//XID frame_id = FakeClientID(serverClient->index);
+//CreateWindow(XID, screen->root, 0, 0, width, heigth, 0, InputOutput, )
+//values[0] = wm->screen->black_pixel;
+//values[1] =
+//	XCB_EVENT_MASK_KEY_PRESS |
+//	XCB_EVENT_MASK_KEY_RELEASE |
+//	XCB_EVENT_MASK_BUTTON_PRESS |
+//	XCB_EVENT_MASK_BUTTON_RELEASE |
+//	XCB_EVENT_MASK_POINTER_MOTION |
+//	XCB_EVENT_MASK_ENTER_WINDOW |
+//	XCB_EVENT_MASK_LEAVE_WINDOW |
+//	XCB_EVENT_MASK_SUBSTRUCTURE_NOTIFY |
+//	XCB_EVENT_MASK_SUBSTRUCTURE_REDIRECT;
+//values[2] = wm->colormap;
+//
+//
+//}
+
+//static void
+//weston_wm_window_create_frame(struct weston_wm_window *window)
+//{
+//	struct weston_wm *wm = window->wm;
+//	uint32_t values[3];
+//	int x, y, width, height;
+//	int buttons = FRAME_BUTTON_CLOSE;
+//
+//	if (window->decorate & MWM_DECOR_MAXIMIZE)
+//		buttons |= FRAME_BUTTON_MAXIMIZE;
+//
+//	window->frame = frame_create(window->wm->theme,
+//				     window->width, window->height,
+//				     buttons, window->name);
+//	frame_resize_inside(window->frame, window->width, window->height);
+//
+//	weston_wm_window_get_frame_size(window, &width, &height);
+//	weston_wm_window_get_child_position(window, &x, &y);
+//
+//	values[0] = wm->screen->black_pixel;
+//	values[1] =
+//		XCB_EVENT_MASK_KEY_PRESS |
+//		XCB_EVENT_MASK_KEY_RELEASE |
+//		XCB_EVENT_MASK_BUTTON_PRESS |
+//		XCB_EVENT_MASK_BUTTON_RELEASE |
+//		XCB_EVENT_MASK_POINTER_MOTION |
+//		XCB_EVENT_MASK_ENTER_WINDOW |
+//		XCB_EVENT_MASK_LEAVE_WINDOW |
+//		XCB_EVENT_MASK_SUBSTRUCTURE_NOTIFY |
+//		XCB_EVENT_MASK_SUBSTRUCTURE_REDIRECT;
+//	values[2] = wm->colormap;
+//
+//	window->frame_id = xcb_generate_id(wm->conn);
+//	window->base_id = window->frame_id;
+//	xcb_create_window(wm->conn,
+//			  32,
+//			  window->frame_id,
+//			  wm->screen->root,
+//			  0, 0,
+//			  width, height,
+//			  0,
+//			  XCB_WINDOW_CLASS_INPUT_OUTPUT,
+//			  wm->visual_id,
+//			  XCB_CW_BORDER_PIXEL |
+//			  XCB_CW_EVENT_MASK |
+//			  XCB_CW_COLORMAP, values);
+//
+//	xcb_reparent_window(wm->conn, window->id, window->frame_id, x, y);
+//
+//	values[0] = 0;
+//	xcb_configure_window(wm->conn, window->id,
+//			     XCB_CONFIG_WINDOW_BORDER_WIDTH, values);
+//
+//	window->cairo_surface =
+//		cairo_xcb_surface_create_with_xrender_format(wm->conn,
+//							     wm->screen,
+//							     window->frame_id,
+//							     &wm->format_rgba,
+//							     width, height);
+//
+//	hash_table_insert(wm->window_hash, window->frame_id, window);
+//
+//}
+
 static Bool
 xwl_realize_window(WindowPtr window)
 {
@@ -217,7 +335,7 @@ xwl_realize_window(WindowPtr window)
 
 	LogWrite(0, "xwl_realize_window %d\n", window->drawable.id);
 
-    xwl_screen = xwl_screen_get(screen);
+	xwl_screen = xwl_screen_get(screen);
 
     /* call legacy ReleazeWindow */
     screen->RealizeWindow = xwl_screen->RealizeWindow;
@@ -225,66 +343,139 @@ xwl_realize_window(WindowPtr window)
     xwl_screen->RealizeWindow = screen->RealizeWindow;
     screen->RealizeWindow = xwl_realize_window;
 
-    if (xwl_screen->rootless && !window->parent) {
-        RegionNull(&window->clipList);
-        RegionNull(&window->borderClip);
-        RegionNull(&window->winSize);
-    }
+	if (xwl_screen->rootless && !window->parent) {
+		RegionNull(&window->clipList);
+		RegionNull(&window->borderClip);
+		RegionNull(&window->winSize);
+	}
 
-    if (xwl_screen->rootless) {
-        if (window->redirectDraw != RedirectDrawManual) {
-        	LogWrite(0, "unexpected redirect: ");
-        	switch(window->redirectDraw) {
-        	case RedirectDrawNone:
-        		LogWrite(0, "RedirectDrawNone\n");
-        		break;
-        	case RedirectDrawAutomatic:
-        		LogWrite(0, "RedirectDrawAutomatic\n");
-        		break;
-        	case RedirectDrawManual:
-        		LogWrite(0, "RedirectDrawManual\n");
-        		break;
-        	}
-            return ret;
-        }
-    }
-    else {
-        if (window->parent)
-            return ret;
-    }
+    if(window->parent != screen->root && window->parent != 0)
+    	return ret;
 
-    pthread_mutex_lock(&(xwl_screen->window_hash_lock));
-	LogWrite(0, "create xwl_window for %d\n", window->drawable.id);
-    xwl_window = calloc(sizeof *xwl_window, 1);
-    xwl_window->xwl_screen = xwl_screen;
-    xwl_window->window = window;
-    xwl_window->surface = wl_compositor_create_surface(xwl_screen->compositor);
-    xwl_window->shell_surface = NULL;
+    xwl_window = hash_table_lookup(xwl_screen->window_hash, window->drawable.id);
 
-    pthread_mutex_init(&xwl_window->lock, NULL);
 
-    if (xwl_window->surface == NULL) {
-        pthread_mutex_unlock(&(xwl_screen->window_hash_lock));
-        ErrorF("wl_display_create_surface failed\n");
-        return FALSE;
-    }
 
-    wl_display_flush(xwl_screen->display);
+    if(CLIENT_ID(window->drawable.id) != 0 && !xwl_window) {
+    	XID values[4];
+    	int err = 0;
+    	WindowPtr frame;
 
-    wl_surface_set_user_data(xwl_window->surface, xwl_window);
+    	LogWrite(0, "external client %d\n", window->drawable.id);
 
-    dixSetPrivate(&window->devPrivates, &xwl_window_private_key, xwl_window);
+		values[0] = screen->blackPixel;
+		values[1] = screen->blackPixel;
+		values[2] =
+				KeyPressMask|
+				KeyReleaseMask|
+				ButtonPressMask|
+				ButtonReleaseMask|
+				PointerMotionMask|
+				EnterWindowMask|
+				LeaveWindowMask|
+				SubstructureNotifyMask|
+				SubstructureRedirectMask;
 
-    xwl_window->damage =
-        DamageCreate(damage_report, damage_destroy, DamageReportNonEmpty,
-                     FALSE, screen, xwl_window);
-    DamageRegister(&window->drawable, xwl_window->damage);
-    DamageSetReportAfterOp(xwl_window->damage, TRUE);
+		values[3] = xwl_screen->wm->colormap_id;
 
-    xorg_list_init(&xwl_window->link_damage);
-    hash_table_insert(xwl_screen->window_hash, xwl_window->window->drawable.id, xwl_window);
-    pthread_mutex_unlock(&(xwl_screen->window_hash_lock));
-    send_surface_id_event(xwl_window);
+    	frame = CreateWindow(FakeClientID(0), screen->root,
+    			0, 0,
+				window->drawable.width+20,
+				window->drawable.height+20,
+				0, InputOutput,
+				CWBackPixel|CWBorderPixel|CWEventMask|CWColormap, values,
+				32, serverClient, xwl_screen->wm->visual->vid, &err);
+
+    	LogWrite(0, "Frame = %p, err = %d\n", frame, err);
+
+    	/* register this window */
+		LogWrite(0, "create xwl_window for %d\n", window->drawable.id);
+		xwl_window = calloc(sizeof *xwl_window, 1);
+		xwl_window->xwl_screen = xwl_screen;
+		xwl_window->frame_window = frame;
+		xwl_window->window = window;
+		xwl_window->surface = NULL;
+		xwl_window->shell_surface = NULL;
+
+    	ReparentWindow(window, frame, 10, 10, serverClient);
+    	MapWindow(window, serverClient);
+
+		hash_table_insert(xwl_screen->window_hash, window->drawable.id, xwl_window);
+		hash_table_insert(xwl_screen->window_hash, frame->drawable.id, xwl_window);
+
+    	MapWindow(frame, serverClient);
+
+	} else if (xwl_window && !xwl_window->surface) {
+
+		LogWrite(0, "internal window %d\n", window->drawable.id);
+
+		/** imediatly redirect this window **/
+		compRedirectWindow(serverClient, xwl_window->frame_window, CompositeRedirectManual);
+
+		if (window->redirectDraw != RedirectDrawManual) {
+			LogWrite(0, "unexpected redirect: ");
+			switch(window->redirectDraw) {
+			case RedirectDrawNone:
+				LogWrite(0, "RedirectDrawNone\n");
+				break;
+			case RedirectDrawAutomatic:
+				LogWrite(0, "RedirectDrawAutomatic\n");
+				break;
+			case RedirectDrawManual:
+				LogWrite(0, "RedirectDrawManual\n");
+				break;
+			}
+			return ret;
+		}
+
+
+//		LogWrite(0, "create xwl_window for %d\n", window->drawable.id);
+//		xwl_window = calloc(sizeof *xwl_window, 1);
+//		xwl_window->xwl_screen = xwl_screen;
+//		xwl_window->window = window;
+
+
+		xwl_window->surface = wl_compositor_create_surface(xwl_screen->compositor);
+		xwl_window->shell_surface = wl_shell_get_shell_surface(xwl_screen->shell, xwl_window->surface);
+		wl_shell_surface_set_toplevel(xwl_window->shell_surface);
+
+
+		wl_display_flush(xwl_screen->display);
+		wl_surface_set_user_data(xwl_window->surface, xwl_window);
+
+		dixSetPrivate(&window->devPrivates, &xwl_window_private_key, xwl_window);
+
+		xwl_window->damage =
+			DamageCreate(damage_report, damage_destroy, DamageReportNonEmpty,
+						 FALSE, screen, xwl_window);
+		DamageRegister(&window->drawable, xwl_window->damage);
+		DamageSetReportAfterOp(xwl_window->damage, TRUE);
+
+		xorg_list_init(&xwl_window->link_damage);
+
+
+//
+//		if (xwl_window->surface == NULL) {
+//			ErrorF("wl_display_create_surface failed\n");
+//			return FALSE;
+//		}
+//
+//		wl_display_flush(xwl_screen->display);
+//		wl_surface_set_user_data(xwl_window->surface, xwl_window);
+//
+//		dixSetPrivate(&window->devPrivates, &xwl_window_private_key, xwl_window);
+//
+//		xwl_window->damage =
+//			DamageCreate(damage_report, damage_destroy, DamageReportNonEmpty,
+//						 FALSE, screen, xwl_window);
+//		DamageRegister(&window->drawable, xwl_window->damage);
+//		DamageSetReportAfterOp(xwl_window->damage, TRUE);
+//
+//		xorg_list_init(&xwl_window->link_damage);
+//		hash_table_insert(xwl_screen->window_hash, xwl_window->window->drawable.id, xwl_window);
+		//send_surface_id_event(xwl_window);
+
+	}
     return ret;
 }
 
@@ -702,9 +893,21 @@ xwl_screen_init(ScreenPtr pScreen, int argc, char **argv)
 
     if(xwl_screen->wm_fd < 0) {
     	/* start our wm */
-    	weston_wm_create(xwl_screen);
+    	//weston_wm_create(xwl_screen);
     }
 
+    {
+    	XID values[8];
+    	values[0] =
+    			SubstructureRedirectMask |
+				SubstructureNotifyMask |
+				PropertyChangeMask;
+
+    	/** TODO: error checking **/
+    	//ChangeWindowAttributes(pScreen->root, CWEventMask, values, wClient(pScreen->root));
+    	//compRedirectSubwindows(serverClient, pScreen->root, RedirectDrawManual);
+
+    }
 
     return ret;
 }

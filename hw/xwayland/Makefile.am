@@ -18,6 +18,7 @@ Xwayland_SOURCES =				\
 	xwm/cairo-util.c				\
 	xwm/launcher.c			\
 	xwm/hash.c				\
+	wm.c				\
 	xwayland.c				\
 	xwayland-input.c			\
 	xwayland-cursor.c			\
