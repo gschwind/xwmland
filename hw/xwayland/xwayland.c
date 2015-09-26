@@ -363,48 +363,55 @@ xwl_realize_window(WindowPtr window)
 
     	LogWrite(0, "external client %d\n", window->drawable.id);
 
-		values[0] = screen->blackPixel;
-		values[1] = screen->blackPixel;
-		values[2] =
-				KeyPressMask|
-				KeyReleaseMask|
-				ButtonPressMask|
-				ButtonReleaseMask|
-				PointerMotionMask|
-				EnterWindowMask|
-				LeaveWindowMask|
-				SubstructureNotifyMask|
-				SubstructureRedirectMask;
+    	xGetWindowAttributesReply attr;
+    	GetWindowAttributes(window, serverClient, &attr);
 
-		values[3] = xwl_screen->wm->colormap_id;
+    	LogWrite(0, "Override = %d\n", attr.override);
 
-    	frame = CreateWindow(FakeClientID(0), screen->root,
-    			0, 0,
-				window->drawable.width+20,
-				window->drawable.height+20,
-				0, InputOutput,
-				CWBackPixel|CWBorderPixel|CWEventMask|CWColormap, values,
-				32, serverClient, xwl_screen->wm->visual->vid, &err);
+    	if(!attr.override) {
+			values[0] = screen->blackPixel;
+			values[1] = screen->blackPixel;
+			values[2] =
+					KeyPressMask|
+					KeyReleaseMask|
+					ButtonPressMask|
+					ButtonReleaseMask|
+					PointerMotionMask|
+					EnterWindowMask|
+					LeaveWindowMask|
+					SubstructureNotifyMask|
+					SubstructureRedirectMask;
 
-    	LogWrite(0, "Frame = %p, err = %d\n", frame, err);
+			values[3] = xwl_screen->wm->colormap_id;
 
-    	/* register this window */
-		LogWrite(0, "create xwl_window for %d\n", window->drawable.id);
-		xwl_window = calloc(sizeof *xwl_window, 1);
-		xwl_window->xwl_screen = xwl_screen;
-		xwl_window->frame_window = frame;
-		xwl_window->window = window;
-		xwl_window->surface = NULL;
-		xwl_window->shell_surface = NULL;
+			frame = CreateWindow(FakeClientID(0), screen->root,
+					0, 0,
+					window->drawable.width+20,
+					window->drawable.height+20,
+					0, InputOutput,
+					CWBackPixel|CWBorderPixel|CWEventMask|CWColormap, values,
+					32, serverClient, xwl_screen->wm->visual->vid, &err);
 
-    	ReparentWindow(window, frame, 10, 10, serverClient);
-    	MapWindow(window, serverClient);
+			LogWrite(0, "Frame = %p, err = %d\n", frame, err);
 
-		hash_table_insert(xwl_screen->window_hash, window->drawable.id, xwl_window);
-		hash_table_insert(xwl_screen->window_hash, frame->drawable.id, xwl_window);
+			/* register this window */
+			LogWrite(0, "create xwl_window for %d\n", window->drawable.id);
+			xwl_window = calloc(sizeof *xwl_window, 1);
+			xwl_window->xwl_screen = xwl_screen;
+			xwl_window->frame_window = frame;
+			xwl_window->window = window;
+			xwl_window->surface = NULL;
+			xwl_window->shell_surface = NULL;
 
-    	MapWindow(frame, serverClient);
+			ReparentWindow(window, frame, 10, 10, serverClient);
+			MapWindow(window, serverClient);
 
+			hash_table_insert(xwl_screen->window_hash, window->drawable.id, xwl_window);
+			hash_table_insert(xwl_screen->window_hash, frame->drawable.id, xwl_window);
+
+			MapWindow(frame, serverClient);
+
+    	}
 	} else if (xwl_window && !xwl_window->surface) {
 
 		LogWrite(0, "internal window %d\n", window->drawable.id);
@@ -427,12 +434,6 @@ xwl_realize_window(WindowPtr window)
 			}
 			return ret;
 		}
-
-
-//		LogWrite(0, "create xwl_window for %d\n", window->drawable.id);
-//		xwl_window = calloc(sizeof *xwl_window, 1);
-//		xwl_window->xwl_screen = xwl_screen;
-//		xwl_window->window = window;
 
 
 		xwl_window->surface = wl_compositor_create_surface(xwl_screen->compositor);
@@ -891,24 +892,6 @@ xwl_screen_init(ScreenPtr pScreen, int argc, char **argv)
     xwl_screen->CloseScreen = pScreen->CloseScreen;
     pScreen->CloseScreen = xwl_close_screen;
 
-    if(xwl_screen->wm_fd < 0) {
-    	/* start our wm */
-    	//weston_wm_create(xwl_screen);
-    }
-
-    {
-    	XID values[8];
-    	values[0] =
-    			SubstructureRedirectMask |
-				SubstructureNotifyMask |
-				PropertyChangeMask;
-
-    	/** TODO: error checking **/
-    	//ChangeWindowAttributes(pScreen->root, CWEventMask, values, wClient(pScreen->root));
-    	//compRedirectSubwindows(serverClient, pScreen->root, RedirectDrawManual);
-
-    }
-
     return ret;
 }
 
@@ -962,19 +945,5 @@ InitOutput(ScreenInfo * screen_info, int argc, char **argv)
     }
 
     LocalAccessScopeUser();
-}
-
-struct xwl_window * xwl_screen_lock_window(struct xwl_screen *xwl_screen, uint32_t id) {
-	struct xwl_window * xwl_window = NULL;
-	pthread_mutex_lock(&(xwl_screen->window_hash_lock));
-	xwl_window = hash_table_lookup(xwl_screen->window_hash, id);
-	if(xwl_window)
-		pthread_mutex_lock(&(xwl_window->lock));
-	pthread_mutex_unlock(&(xwl_screen->window_hash_lock));
-	return xwl_window;
-}
-
-void xwl_screen_unlock_window(struct xwl_window * xwl_window) {
-	pthread_mutex_unlock(&(xwl_window->lock));
 }
 
