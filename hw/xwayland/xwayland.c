@@ -431,7 +431,7 @@ xwl_realize_window(WindowPtr window)
 
 		LogWrite(0, "internal window %d\n", window->drawable.id);
 
-		/** imediatly redirect this window **/
+		/** Immediately redirect this window **/
 		compRedirectWindow(serverClient, xwl_window->frame_window, CompositeRedirectManual);
 
 		if (window->redirectDraw != RedirectDrawManual) {
@@ -460,6 +460,9 @@ xwl_realize_window(WindowPtr window)
 
 		out = cairo_image_surface_create_for_data(xwl_pixmap->data, CAIRO_FORMAT_ARGB32, pixmap->drawable.width, pixmap->drawable.height, pixmap->devKind);
 		cr = cairo_create(out);
+		cairo_set_source_rgb(cr, 0, 0, 0);
+		cairo_paint(cr);
+
 		rects = pixman_region_rectangles(&(xwl_window->frame_window->clipList), &nrect);
 		for(i = 0; i < nrect; ++i) {
 			cairo_rectangle(cr, rects[i].x1, rects[i].y1, rects[i].x2 - rects[i].x1, rects[i].y2 - rects[i].y1);
@@ -467,12 +470,14 @@ xwl_realize_window(WindowPtr window)
 			cairo_set_source_surface(cr, sbuff, 0, 0);
 			cairo_paint(cr);
 		}
+
 		cairo_destroy(cr);
+		cairo_surface_destroy(out);
+		cairo_surface_destroy(sbuff);
 
 		xwl_window->surface = wl_compositor_create_surface(xwl_screen->compositor);
 		xwl_window->shell_surface = wl_shell_get_shell_surface(xwl_screen->shell, xwl_window->surface);
 		wl_shell_surface_set_toplevel(xwl_window->shell_surface);
-
 
 		wl_display_flush(xwl_screen->display);
 		wl_surface_set_user_data(xwl_window->surface, xwl_window);
@@ -615,13 +620,13 @@ xwl_screen_post_damage(struct xwl_screen *xwl_screen)
         box = RegionExtents(region);
         wl_surface_damage(xwl_window->surface, box->x1, box->y1,
                           box->x2 - box->x1, box->y2 - box->y1);
-    	LogWrite(0, "damage (%d,%d,%d,%d)\n", box->x1, box->y1,
-                          box->x2 - box->x1, box->y2 - box->y1);
+    	//LogWrite(0, "damage (%d,%d,%d,%d)\n", box->x1, box->y1,
+         //                 box->x2 - box->x1, box->y2 - box->y1);
 
         xwl_window->frame_callback = wl_surface_frame(xwl_window->surface);
         wl_callback_add_listener(xwl_window->frame_callback, &frame_listener, xwl_window);
 
-        LogWrite(0, "commit (%d)\n", xwl_window->window->drawable.id);
+        //LogWrite(0, "commit (%d)\n", xwl_window->window->drawable.id);
         wl_surface_commit(xwl_window->surface);
         DamageEmpty(xwl_window->damage);
 
