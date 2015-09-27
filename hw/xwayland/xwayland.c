@@ -342,7 +342,15 @@ shell_surface_configure(void *data,
                         struct wl_shell_surface *wl_shell_surface,
                         uint32_t edges, int32_t width, int32_t height)
 {
+	struct xwl_window * xwl_window = data;
+	XID values[2];
+
 	LogWrite(0, "%s\n", __PRETTY_FUNCTION__);
+	frame_resize_inside(xwl_window->frame, width, height);
+	values[0] = frame_width(xwl_window->frame);
+	values[1] = frame_height(xwl_window->frame);
+	ChangeWindowAttributes(xwl_window->frame_window, CWWidth|CWHeight, values, serverClient);
+
 }
 
 static void
@@ -570,13 +578,16 @@ xwl_realize_window(WindowPtr window)
 
 		//xwl_window->frame_window = xwl_window->window;
 
-		xwl_window->frame_window = CreateWindow(FakeClientID(CLIENT_ID(xwl_screen->wm->identity_window)), screen->root,
+		xwl_window->frame_window = CreateWindow(FakeClientID(0), screen->root,
 				0, 0,
 				frame_width(xwl_window->frame),
 				frame_height(xwl_window->frame),
 				0, InputOutput,
 				CWBackPixel|CWBorderPixel|CWBorderWidth|CWColormap, values,
 				32, serverClient, xwl_screen->wm->visual->vid, &err);
+
+		/* once a resource is created it should be added */
+		AddResource(xwl_window->frame_window->drawable.id, RT_WINDOW, (void*)xwl_window->frame_window);
 
 		LogWrite(0, "Frame = %p, err = %d\n", xwl_window->frame_window, err);
 

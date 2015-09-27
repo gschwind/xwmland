@@ -466,6 +466,19 @@ window_manager_window_set_virtual_desktop(struct xwl_window *window,
 }
 
 static void
+window_manager_handle_configure_notify(struct window_manager *wm, xcb_generic_event_t *event) {
+	struct xcb_configure_notify_event_t * configure_notify = (struct xcb_configure_notify_event_t*)event;
+
+	LogWrite(0, "XCB_CONFIGURE_NOTIFY (window %d) %d,%d @ %dx%d\n",
+	       configure_notify->window,
+	       configure_notify->x, configure_notify->y,
+	       configure_notify->width, configure_notify->height);
+
+
+}
+
+
+static void
 window_manager_handle_event(struct window_manager *wm)
 {
 	xcb_generic_event_t *event;
@@ -514,9 +527,9 @@ window_manager_handle_event(struct window_manager *wm)
 //		case XCB_CONFIGURE_REQUEST:
 //			weston_wm_handle_configure_request(wm, event);
 //			break;
-//		case XCB_CONFIGURE_NOTIFY:
-//			weston_wm_handle_configure_notify(wm, event);
-//			break;
+		case XCB_CONFIGURE_NOTIFY:
+			window_manager_handle_configure_notify(wm, event);
+			break;
 //		case XCB_DESTROY_NOTIFY:
 //			weston_wm_handle_destroy_notify(wm, event);
 //			break;
