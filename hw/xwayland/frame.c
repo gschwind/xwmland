@@ -33,6 +33,7 @@
 #include <wayland-util.h>
 #include <linux/input.h>
 
+#include "xwl_window.h"
 #include "cairo-util.h"
 
 enum frame_button_flags {

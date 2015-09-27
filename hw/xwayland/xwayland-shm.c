@@ -171,6 +171,8 @@ xwl_shm_create_pixmap(ScreenPtr screen,
     struct xwl_pixmap *xwl_pixmap;
     size_t size, stride;
 
+    LogWrite(0, "xwl_shm_create_pixmap\n");
+
     if (hint == CREATE_PIXMAP_USAGE_GLYPH_PICTURE ||
         (width == 0 && height == 0) || depth < 15)
         return fbCreatePixmap(screen, width, height, depth, hint);

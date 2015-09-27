@@ -279,6 +279,9 @@ pointer_handle_motion(void *data, struct wl_pointer *pointer,
     dx = xwl_seat->focus_window->window->drawable.x;
     dy = xwl_seat->focus_window->window->drawable.y;
 
+    xwl_seat->last_pointer_x = sx;
+    xwl_seat->last_pointer_y = sy;
+
     valuator_mask_zero(&mask);
     valuator_mask_set(&mask, 0, dx + sx);
     valuator_mask_set(&mask, 1, dy + sy);
@@ -318,6 +321,57 @@ pointer_handle_button(void *data, struct wl_pointer *pointer, uint32_t serial,
     valuator_mask_zero(&mask);
     QueuePointerEvents(xwl_seat->pointer,
                        state ? ButtonPress : ButtonRelease, index, 0, &mask);
+
+    if(state) {
+    	struct xwl_window * window = xwl_seat->focus_window;
+		enum theme_location location;
+		int event_x = xwl_seat->last_pointer_x;
+		int event_y = xwl_seat->last_pointer_y;
+
+		LogWrite(0, "ButtonPress (%d,%d)\n", event_x, event_y);
+
+		/* Make sure we're looking at the right location.  The frame
+		 * could have received a motion event from a pointer from a
+		 * different wl_seat, but under X it looks like our core
+		 * pointer moved.  Move the frame pointer to the button press
+		 * location before deciding what to do. */
+		location = frame_pointer_motion(window->frame, NULL,
+						event_x, event_y);
+		location = frame_pointer_button(window->frame, NULL,
+						button, state);
+		//if (frame_status(window->frame) & FRAME_STATUS_REPAINT)
+		//	weston_wm_window_schedule_repaint(window);
+
+		if (frame_status(window->frame) & FRAME_STATUS_MOVE) {
+			if (pointer)
+				wl_shell_surface_move(window->shell_surface, xwl_seat->seat, serial);
+			frame_status_clear(window->frame, FRAME_STATUS_MOVE);
+		}
+
+		if (frame_status(window->frame) & FRAME_STATUS_RESIZE) {
+			if (pointer)
+				wl_shell_surface_resize(window->shell_surface, xwl_seat->seat, serial, location);
+			frame_status_clear(window->frame, FRAME_STATUS_RESIZE);
+		}
+
+//		if (frame_status(window->frame) & FRAME_STATUS_CLOSE) {
+//			weston_wm_window_close(window, time);
+//			frame_status_clear(window->frame, FRAME_STATUS_CLOSE);
+//		}
+//
+//		if (frame_status(window->frame) & FRAME_STATUS_MAXIMIZE) {
+//			window->maximized_horz = !window->maximized_horz;
+//			window->maximized_vert = !window->maximized_vert;
+//			if (weston_wm_window_is_maximized(window)) {
+//				window->saved_width = window->width;
+//				window->saved_height = window->height;
+//				wl_shell_surface_set_maximized(window->shell_surface);
+//			} else {
+//				wl_shell_surface_set_toplevel(window->shell_surface);
+//			}
+//			frame_status_clear(window->frame, FRAME_STATUS_MAXIMIZE);
+//		}
+    }
 
 }
 
@@ -698,7 +752,7 @@ seat_handle_capabilities(void *data, struct wl_seat *seat,
 {
     struct xwl_seat *xwl_seat = data;
 
-    if (caps & WL_SEAT_CAPABILITY_POINTER && xwl_seat->wl_pointer == NULL) {
+    if ((caps & WL_SEAT_CAPABILITY_POINTER) && (xwl_seat->wl_pointer == NULL)) {
         xwl_seat->wl_pointer = wl_seat_get_pointer(seat);
         wl_pointer_add_listener(xwl_seat->wl_pointer,
                                 &pointer_listener, xwl_seat);
@@ -890,19 +944,6 @@ InitInput(int argc, char *argv[])
 
 
     xwl_screen->wm = window_manager_create(pScreen);
-
-    {
-    	XID values[8];
-    	values[0] =
-    			SubstructureRedirectMask |
-				SubstructureNotifyMask |
-				PropertyChangeMask;
-
-    	/** TODO: error checking **/
-    	ChangeWindowAttributes(pScreen->root, CWEventMask, values, serverClient);
-    	//compRedirectSubwindows(serverClient, pScreen->root, RedirectDrawManual);
-
-    }
 
     LogWrite(0, "InitInput\n");
 

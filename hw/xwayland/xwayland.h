@@ -42,6 +42,7 @@
 #include <randrstr.h>
 #include <exevents.h>
 
+#include "xwl_window.h"
 #include "wm.h"
 
 struct xwl_screen {
@@ -68,6 +69,10 @@ struct xwl_screen {
     DestroyWindowProcPtr DestroyWindow;
     RealizeWindowProcPtr RealizeWindow;
     UnrealizeWindowProcPtr UnrealizeWindow;
+
+    ClipNotifyProcPtr ClipNotify;
+    WindowExposuresProcPtr WindowExposures;
+    ClearToBackgroundProcPtr ClearToBackground;
 
     struct xorg_list output_list;
     struct xorg_list seat_list;
@@ -109,68 +114,7 @@ struct xwl_screen {
 
 };
 
-struct wm_size_hints {
-	uint32_t flags;
-	int32_t x, y;
-	int32_t width, height;	/* should set so old wm's don't mess up */
-	int32_t min_width, min_height;
-	int32_t max_width, max_height;
-	int32_t width_inc, height_inc;
-	struct {
-		int32_t x;
-		int32_t y;
-	} min_aspect, max_aspect;
-	int32_t base_width, base_height;
-	int32_t win_gravity;
-};
 
-struct motif_wm_hints {
-	uint32_t flags;
-	uint32_t functions;
-	uint32_t decorations;
-	int32_t input_mode;
-	uint32_t status;
-};
-
-
-struct xwl_window {
-	pthread_mutex_t lock;
-    struct xwl_screen *xwl_screen;
-    struct wl_surface *surface;
-    struct wl_shell_surface *shell_surface;
-    struct frame * frame;
-
-    WindowPtr frame_window;
-    WindowPtr window;
-    DamagePtr damage;
-    struct xorg_list link_damage;
-    struct xorg_list link_window;
-    struct wl_callback *frame_callback;
-
-
-	int properties_dirty;
-	int pid;
-	char *machine;
-	char *class;
-	char *name;
-	struct xwl_window *transient_for;
-	uint32_t protocols;
-	xcb_atom_t type;
-	int width, height;
-	int x, y;
-	int saved_width, saved_height;
-	int decorate;
-	int override_redirect;
-	int fullscreen;
-	int has_alpha;
-	int delete_window;
-	int maximized_vert;
-	int maximized_horz;
-	struct wm_size_hints size_hints;
-	struct motif_wm_hints motif_hints;
-	struct wl_list link;
-
-};
 
 #define MODIFIER_META 0x01
 
@@ -194,6 +138,9 @@ struct xwl_seat {
     struct xwl_window *focus_window;
     uint32_t id;
     uint32_t pointer_enter_serial;
+    int last_pointer_x;
+    int last_pointer_y;
+
     struct xorg_list link;
     CursorPtr x_cursor;
     struct wl_surface *cursor;

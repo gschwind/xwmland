@@ -23,6 +23,7 @@
 #include <dix-config.h>
 #include <dix.h>
 
+#include "xwl_window.h"
 #include "cairo-util.h"
 #include "xwayland.h"
 
@@ -108,6 +109,7 @@ struct window_manager {
 	char * display;
 	int fd_display;
 	xcb_connection_t *conn;
+	XID identity_window;
 	const xcb_query_extension_reply_t *xfixes;
 	//struct wl_event_source *source;
 	//xcb_screen_t *screen;
@@ -234,6 +236,9 @@ window_manager_window_set_virtual_desktop(struct xwl_window *window,
 				     int desktop);
 
 void
-window_manager_window_draw_decoration(struct xwl_window *xwl_window);
+window_manager_get_visual_and_colormap(struct window_manager *wm);
+
+void
+window_manager_window_draw_decoration(struct xwl_window *xwl_window, PixmapPtr pixmap);
 
 #endif /* HW_XWAYLAND_WM_H_ */

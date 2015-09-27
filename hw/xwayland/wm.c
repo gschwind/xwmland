@@ -138,7 +138,7 @@ window_manager_window_read_properties(struct xwl_window *window)
 		xcb_atom_t type;
 		int offset;
 	} props[] = {
-		{ XCB_ATOM_WM_CLASS, XCB_ATOM_STRING, F(class) },
+		{ XCB_ATOM_WM_CLASS, XCB_ATOM_STRING, F(class_) },
 		{ XCB_ATOM_WM_NAME, XCB_ATOM_STRING, F(name) },
 		{ XCB_ATOM_WM_TRANSIENT_FOR, XCB_ATOM_WINDOW, F(transient_for) },
 		{ wm->atom.wm_protocols, TYPE_WM_PROTOCOLS, F(protocols) },
@@ -270,7 +270,7 @@ window_manager_window_read_properties(struct xwl_window *window)
 
 }
 
-static void
+void
 window_manager_get_visual_and_colormap(struct window_manager *wm)
 {
 	int i;
@@ -286,6 +286,12 @@ window_manager_get_visual_and_colormap(struct window_manager *wm)
 		}
 	}
 
+	for(;i < wm->screen->numDepths; ++i) {
+		LogWrite(0, "DEPTH: depth %d, nvis %d\n",
+				(int)wm->screen->allowedDepths[i].depth,
+				(int)wm->screen->allowedDepths[i].numVids);
+	}
+
 	LogWrite(0, "Found visual: vid %d\n", (int)visual_id);
 
 	for(i = 0; i < wm->screen->numVisuals; ++i) {
@@ -294,6 +300,13 @@ window_manager_get_visual_and_colormap(struct window_manager *wm)
 			wm->visual = &(wm->screen->visuals[i]);
 			break;
 		}
+	}
+
+	for(;i < wm->screen->numVisuals; ++i) {
+		LogWrite(0, "VISUAL: vid %d, class %d, bits %d\n",
+				(int)wm->screen->visuals[i].vid,
+				(int)wm->screen->visuals[i].class,
+				(int)wm->screen->visuals[i].bitsPerRGBValue);
 	}
 
 	/* TODO: check */
@@ -357,36 +370,46 @@ window_manager_handle_map_notify(struct window_manager *wm, xcb_generic_event_t 
 }
 
 void
-window_manager_window_draw_decoration(struct xwl_window *xwl_window) {
+window_manager_window_draw_decoration(struct xwl_window *xwl_window, PixmapPtr pixmap) {
 	cairo_surface_t * sbuff, * out;
 	cairo_t * cr;
-	PixmapPtr pixmap;
 	struct xwl_pixmap * xwl_pixmap;
 	pixman_box16_t * rects;
 	int nrect, i;
+
+//	if(xwl_window->frame_window == NULL)
+//		return;
+//
+//	if(xwl_window->frame_window->drawable.id == 0)
+//		return;
+
+	//pixmap = (*xwl_window->xwl_screen->screen->GetWindowPixmap)(xwl_window->frame_window);
 
 	sbuff = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, frame_width(xwl_window->frame), frame_height(xwl_window->frame));
 	cr = cairo_create(sbuff);
 	frame_repaint(xwl_window->frame, cr);
 	cairo_destroy(cr);
 
-	pixmap = (*xwl_window->xwl_screen->screen->GetWindowPixmap)(xwl_window->frame_window);
 	xwl_pixmap = xwl_pixmap_get(pixmap);
 
 	out = cairo_image_surface_create_for_data(xwl_pixmap->data, CAIRO_FORMAT_ARGB32, pixmap->drawable.width, pixmap->drawable.height, pixmap->devKind);
 	cr = cairo_create(out);
-	rects = pixman_region_rectangles(&(xwl_window->frame_window->clipList), &nrect);
+	cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
+	rects = pixman_region_rectangles(&(xwl_window->frame_clip), &nrect);
 	LogWrite(0, "nrect %d\n", nrect);
 	for(i = 0; i < nrect; i++) {
-		cairo_rectangle(cr, rects[i].x1, rects[i].y1, rects[i].x2 - rects[i].x1, rects[i].y2 - rects[i].y1);
-		cairo_clip(cr);
-		cairo_set_source_surface(cr, sbuff, 0, 0);
-		cairo_paint(cr);
+		cairo_reset_clip(cr);
+		LogWrite(0, " (%d,%d,%d,%d)", rects[i].x1, rects[i].x2, rects[i].y1, rects[i].y2);
+//		cairo_rectangle(cr, rects[i].x1, rects[i].y1, rects[i].x2 - rects[i].x1, rects[i].y2 - rects[i].y1);
+//		cairo_clip(cr);
+//		cairo_set_source_surface(cr, sbuff, 0, 0);
+//		cairo_paint(cr);
 		cairo_rectangle(cr, rects[i].x1 + 0.5, rects[i].y1 + 0.5, rects[i].x2 - rects[i].x1 - 1.0, rects[i].y2 - rects[i].y1 - 1.0);
 		cairo_set_source_rgb(cr, 1, 0, 1);
 		cairo_stroke(cr);
 	}
 
+	cairo_surface_flush(out);
 	cairo_destroy(cr);
 	cairo_surface_destroy(out);
 	cairo_surface_destroy(sbuff);
@@ -590,6 +613,9 @@ window_manager_init_conn(void * data) {
 	char wm_sn[] = "WM_S0";
 	char net_wm_cm[] = "_NET_WM_CM_S0";
 	int pid = getpid();
+	xcb_atom_t wm_sn_atom;
+	xcb_atom_t cm_sn_atom;
+	uint32_t attrs[2];
 
 	wm->conn = xcb_connect_to_fd(wm->fd[0], NULL);
 	if((err = xcb_connection_has_error(wm->conn)) > 0) {
@@ -598,11 +624,8 @@ window_manager_init_conn(void * data) {
 	s = xcb_setup_roots_iterator(xcb_get_setup(wm->conn));
 	screen = s.data;
 
-
-	xcb_atom_t wm_sn_atom = get_atom(wm, wm_sn);
-	xcb_atom_t cm_sn_atom = get_atom(wm, net_wm_cm);
-
-	uint32_t attrs[2];
+	wm_sn_atom = get_atom(wm, wm_sn);
+	cm_sn_atom = get_atom(wm, net_wm_cm);
 
 	/* OVERRIDE_REDIRECT */
 	attrs[0] = 1;
@@ -611,6 +634,7 @@ window_manager_init_conn(void * data) {
 
 	/* Warning: This window must be focusable, thus it MUST be an INPUT_OUTPUT window */
 	xcb_window_t identity_window = xcb_generate_id(wm->conn);
+	wm->identity_window = identity_window;
 	xcb_create_window(wm->conn, XCB_COPY_FROM_PARENT, identity_window,
 			screen->root, -100, -100, 1, 1, 0, XCB_WINDOW_CLASS_INPUT_OUTPUT,
 			XCB_COPY_FROM_PARENT, attrs_mask, attrs);
@@ -662,15 +686,16 @@ window_manager_create(ScreenPtr screen)
 
 	wm->theme = theme_create();
 
+	if(socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0, wm->fd) < 0) {
+		LogWrite(0, "Cannot pair socket\n");
+	}
+
 	pthread_mutex_init(&wm->init_conn, NULL);
 	pthread_mutex_lock(&wm->init_conn);
 	pthread_create(&wm->init_conn_thread, NULL, window_manager_init_conn, wm);
 	pthread_detach(wm->init_conn_thread);
 
-	if(socketpair(AF_UNIX, SOCK_NONBLOCK | SOCK_STREAM | SOCK_CLOEXEC, 0, wm->fd) < 0) {
-		LogWrite(0, "Cannot pair socket\n");
-	}
-    RegisterBlockAndWakeupHandlers(window_manager_conn_wait_block_handler, window_manager_conn_wait_wakeup_handler, wm);
+	RegisterBlockAndWakeupHandlers(window_manager_conn_wait_block_handler, window_manager_conn_wait_wakeup_handler, wm);
 
     TimerSet(NULL, 0, 1, add_client_fd, wm);
 	return wm;
