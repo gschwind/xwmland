@@ -343,13 +343,16 @@ shell_surface_configure(void *data,
                         uint32_t edges, int32_t width, int32_t height)
 {
 	struct xwl_window * xwl_window = data;
-	XID values[2];
+	XID values[4];
 
-	LogWrite(0, "%s\n", __PRETTY_FUNCTION__);
-	frame_resize_inside(xwl_window->frame, width, height);
+	LogWrite(0, "%s(%d,%d,%d)\n", __PRETTY_FUNCTION__, edges, width, height);
+	frame_resize(xwl_window->frame, width, height);
 	values[0] = frame_width(xwl_window->frame);
 	values[1] = frame_height(xwl_window->frame);
-	ChangeWindowAttributes(xwl_window->frame_window, CWWidth|CWHeight, values, serverClient);
+	ConfigureWindow(xwl_window->frame_window, CWWidth|CWHeight, values, serverClient);
+
+	frame_interior(xwl_window->frame, &values[0], &values[1], &values[2], &values[3]);
+	ConfigureWindow(xwl_window->window, CWX|CWY|CWWidth|CWHeight, values, serverClient);
 
 }
 
@@ -605,7 +608,6 @@ xwl_realize_window(WindowPtr window)
 		compRedirectWindow(serverClient, xwl_window->frame_window, CompositeRedirectManual);
 
         //window_manager_window_draw_decoration(xwl_window, (*screen->GetWindowPixmap)(xwl_window->frame_window));
-
 
 		if (xwl_window->frame_window->redirectDraw != RedirectDrawManual) {
 			LogWrite(0, "unexpected redirect: ");

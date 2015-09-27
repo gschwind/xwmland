@@ -325,6 +325,7 @@ pointer_handle_button(void *data, struct wl_pointer *pointer, uint32_t serial,
     if(state) {
     	struct xwl_window * window = xwl_seat->focus_window;
 		enum theme_location location;
+		enum theme_location location_2;
 		int event_x = xwl_seat->last_pointer_x;
 		int event_y = xwl_seat->last_pointer_y;
 
@@ -337,7 +338,9 @@ pointer_handle_button(void *data, struct wl_pointer *pointer, uint32_t serial,
 		 * location before deciding what to do. */
 		location = frame_pointer_motion(window->frame, NULL,
 						event_x, event_y);
-		location = frame_pointer_button(window->frame, NULL,
+		if(location == THEME_LOCATION_INTERIOR)
+			return;
+		location_2 = frame_pointer_button(window->frame, NULL,
 						button, state);
 		//if (frame_status(window->frame) & FRAME_STATUS_REPAINT)
 		//	weston_wm_window_schedule_repaint(window);
