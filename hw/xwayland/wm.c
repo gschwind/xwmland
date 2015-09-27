@@ -28,6 +28,7 @@
 #include "wm.h"
 #include "xwm/hash.h"
 
+#include <input.h>
 #include <unistd.h>
 #include <pthread.h>
 #include <sys/socket.h>
@@ -276,7 +277,9 @@ window_manager_get_visual_and_colormap(struct window_manager *wm)
 
 	VisualID visual_id = 0;
 	for(i = 0; i < wm->screen->numDepths; ++i) {
-		LogWrite(0, "DEPTH: depth %d, nvis %d\n", wm->screen->allowedDepths[i].depth, wm->screen->allowedDepths[i].numVids);
+		LogWrite(0, "DEPTH: depth %d, nvis %d\n",
+				(int)wm->screen->allowedDepths[i].depth,
+				(int)wm->screen->allowedDepths[i].numVids);
 		if(wm->screen->allowedDepths[i].depth == 32) {
 			visual_id = wm->screen->allowedDepths[i].vids[0];
 			break;
@@ -286,7 +289,7 @@ window_manager_get_visual_and_colormap(struct window_manager *wm)
 	LogWrite(0, "Found visual: vid %d\n", (int)visual_id);
 
 	for(i = 0; i < wm->screen->numVisuals; ++i) {
-		LogWrite(0, "VISUAL: vid %d, class %d\n", (int)wm->screen->visuals[i].vid, wm->screen->visuals[i].class);
+		LogWrite(0, "VISUAL: vid %d, class %d\n", (int)wm->screen->visuals[i].vid, (int)wm->screen->visuals[i].class);
 		if((int)wm->screen->visuals[i].vid == (int)visual_id) {
 			wm->visual = &(wm->screen->visuals[i]);
 			break;
@@ -311,6 +314,134 @@ window_manager_block_handler(void *data, struct timeval **tv, void *read_mask)
 
 }
 
+void
+window_manager_window_set_wm_state(struct xwl_window *window, int32_t state)
+{
+	struct window_manager *wm = window->xwl_screen->wm;
+	uint32_t property[2];
+
+	property[0] = state;
+	property[1] = XCB_WINDOW_NONE;
+	ChangeWindowProperty(window->window,
+			wm->atom.wm_state,
+			wm->atom.wm_state,
+			32,
+			PropModeReplace,
+			2,
+			property,
+			True);
+
+}
+
+
+
+
+static void
+window_manager_handle_map_notify(struct window_manager *wm, xcb_generic_event_t *event)
+{
+	xcb_map_notify_event_t * map = (xcb_map_notify_event_t *) event;
+	struct xwl_window *window;
+
+	LogWrite(0, "XCB_MAP_NOTIFY (window %d)\n", map->window);
+
+	window = hash_table_lookup(xwl_screen_get(wm->screen)->window_hash, map->window);
+	if(!window)
+		return;
+
+	if(window->window->drawable.id != map->window)
+		return;
+
+	uint32_t values = XCB_EVENT_MASK_PROPERTY_CHANGE|XCB_EVENT_MASK_STRUCTURE_NOTIFY;
+	xcb_change_window_attributes(wm->conn, window->window->drawable.id, XCB_CW_EVENT_MASK, &values);
+
+}
+
+void
+window_manager_window_draw_decoration(struct xwl_window *xwl_window) {
+	cairo_surface_t * sbuff, * out;
+	cairo_t * cr;
+	PixmapPtr pixmap;
+	struct xwl_pixmap * xwl_pixmap;
+	pixman_box16_t * rects;
+	int nrect, i;
+
+	sbuff = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, frame_width(xwl_window->frame), frame_height(xwl_window->frame));
+	cr = cairo_create(sbuff);
+	frame_repaint(xwl_window->frame, cr);
+	cairo_destroy(cr);
+
+	pixmap = (*xwl_window->xwl_screen->screen->GetWindowPixmap)(xwl_window->frame_window);
+	xwl_pixmap = xwl_pixmap_get(pixmap);
+
+	out = cairo_image_surface_create_for_data(xwl_pixmap->data, CAIRO_FORMAT_ARGB32, pixmap->drawable.width, pixmap->drawable.height, pixmap->devKind);
+	cr = cairo_create(out);
+	rects = pixman_region_rectangles(&(xwl_window->frame_window->clipList), &nrect);
+	LogWrite(0, "nrect %d\n", nrect);
+	for(i = 0; i < nrect; i++) {
+		cairo_rectangle(cr, rects[i].x1, rects[i].y1, rects[i].x2 - rects[i].x1, rects[i].y2 - rects[i].y1);
+		cairo_clip(cr);
+		cairo_set_source_surface(cr, sbuff, 0, 0);
+		cairo_paint(cr);
+		cairo_rectangle(cr, rects[i].x1 + 0.5, rects[i].y1 + 0.5, rects[i].x2 - rects[i].x1 - 1.0, rects[i].y2 - rects[i].y1 - 1.0);
+		cairo_set_source_rgb(cr, 1, 0, 1);
+		cairo_stroke(cr);
+	}
+
+	cairo_destroy(cr);
+	cairo_surface_destroy(out);
+	cairo_surface_destroy(sbuff);
+}
+
+void
+window_manager_window_set_net_wm_state(struct xwl_window *window)
+{
+	struct window_manager *wm = window->xwl_screen->wm;
+	uint32_t property[3];
+	int i;
+
+	i = 0;
+	if (window->fullscreen)
+		property[i++] = wm->atom.net_wm_state_fullscreen;
+	if (window->maximized_vert)
+		property[i++] = wm->atom.net_wm_state_maximized_vert;
+	if (window->maximized_horz)
+		property[i++] = wm->atom.net_wm_state_maximized_horz;
+
+	ChangeWindowProperty(window->window,
+		    wm->atom.net_wm_state,
+				XCB_ATOM_ATOM,
+				32,
+				PropModeReplace,
+				i,
+				property,
+				True);
+
+}
+
+/*
+ * Sets the _NET_WM_DESKTOP property for the window to 'desktop'.
+ * Passing a <0 desktop value deletes the property.
+ */
+void
+window_manager_window_set_virtual_desktop(struct xwl_window *window,
+				     int desktop)
+{
+	struct window_manager *wm = window->xwl_screen->wm;
+
+	if (desktop >= 0) {
+		ChangeWindowProperty(window->window,
+				wm->atom.net_wm_desktop,
+				XCB_ATOM_CARDINAL,
+					32,
+					PropModeReplace,
+					1,
+					&desktop,
+					True);
+	} else {
+		DeleteProperty(serverClient, window->window, wm->atom.net_wm_desktop);
+	}
+}
+
 static void
 window_manager_handle_event(struct window_manager *wm)
 {
@@ -328,16 +459,16 @@ window_manager_handle_event(struct window_manager *wm)
 //			continue;
 //		}
 //
-		switch (event->response_type) {
+		switch (event->response_type&(~0x80)) {
 //		case XCB_BUTTON_PRESS:
 //		case XCB_BUTTON_RELEASE:
 //			weston_wm_handle_button(wm, event);
 //			break;
 //		case XCB_ENTER_NOTIFY:
-//			weston_wm_handle_enter(wm, event);
+//			window_manager_handle_enter(wm, event);
 //			break;
 //		case XCB_LEAVE_NOTIFY:
-//			weston_wm_handle_leave(wm, event);
+//			window_manager_handle_leave(wm, event);
 //			break;
 //		case XCB_MOTION_NOTIFY:
 //			weston_wm_handle_motion(wm, event);
@@ -348,9 +479,9 @@ window_manager_handle_event(struct window_manager *wm)
 //		case XCB_MAP_REQUEST:
 //			weston_wm_handle_map_request(wm, event);
 //			break;
-//		case XCB_MAP_NOTIFY:
-//			weston_wm_handle_map_notify(wm, event);
-//			break;
+		case XCB_MAP_NOTIFY:
+			window_manager_handle_map_notify(wm, event);
+			break;
 //		case XCB_UNMAP_NOTIFY:
 //			weston_wm_handle_unmap_notify(wm, event);
 //			break;
@@ -433,6 +564,21 @@ window_manager_conn_wait_wakeup_handler(void *data, int err, void *read_mask)
 	}
 }
 
+static xcb_atom_t
+get_atom(struct window_manager *wm, char const * name) {
+	xcb_intern_atom_cookie_t ck = xcb_intern_atom(wm->conn, 0, strlen(name), name);
+	xcb_generic_error_t * err;
+	xcb_intern_atom_reply_t * reply = xcb_intern_atom_reply(wm->conn, ck, &err);
+	if(reply) {
+		xcb_atom_t ret = reply->atom;
+		free(reply);
+		return ret;
+	} else {
+		xcb_discard_reply(wm->conn, ck.sequence);
+	}
+	return XCB_NONE;
+}
+
 static void *
 window_manager_init_conn(void * data) {
 	struct window_manager *wm = data;
@@ -440,12 +586,47 @@ window_manager_init_conn(void * data) {
 	xcb_screen_iterator_t s;
 	xcb_screen_t * screen;
 	int err;
+	char const * name = "page";
+	char wm_sn[] = "WM_S0";
+	char net_wm_cm[] = "_NET_WM_CM_S0";
+	int pid = getpid();
+
 	wm->conn = xcb_connect_to_fd(wm->fd[0], NULL);
 	if((err = xcb_connection_has_error(wm->conn)) > 0) {
 		LogWrite(0, "Error %d\n", err);
 	}
 	s = xcb_setup_roots_iterator(xcb_get_setup(wm->conn));
 	screen = s.data;
+
+
+	xcb_atom_t wm_sn_atom = get_atom(wm, wm_sn);
+	xcb_atom_t cm_sn_atom = get_atom(wm, net_wm_cm);
+
+	uint32_t attrs[2];
+
+	/* OVERRIDE_REDIRECT */
+	attrs[0] = 1;
+	attrs[1] = XCB_EVENT_MASK_STRUCTURE_NOTIFY|XCB_EVENT_MASK_PROPERTY_CHANGE;
+	uint32_t attrs_mask = XCB_CW_OVERRIDE_REDIRECT|XCB_CW_EVENT_MASK;
+
+	/* Warning: This window must be focusable, thus it MUST be an INPUT_OUTPUT window */
+	xcb_window_t identity_window = xcb_generate_id(wm->conn);
+	xcb_create_window(wm->conn, XCB_COPY_FROM_PARENT, identity_window,
+			screen->root, -100, -100, 1, 1, 0, XCB_WINDOW_CLASS_INPUT_OUTPUT,
+			XCB_COPY_FROM_PARENT, attrs_mask, attrs);
+
+	xcb_change_property(wm->conn, XCB_PROP_MODE_REPLACE, identity_window, get_atom(wm, "_NET_WM_NAME"), get_atom(wm, "UTF8_STRING"), 8, strlen(name), name);
+	xcb_change_property(wm->conn, XCB_PROP_MODE_REPLACE, identity_window, get_atom(wm, "_NET_SUPPORTING_WM_CHECK"), get_atom(wm, "WINDOW"), 32, 1, &identity_window);
+	xcb_change_property(wm->conn, XCB_PROP_MODE_REPLACE, identity_window, get_atom(wm, "_NET_WM_PID"), get_atom(wm, "CARDINAL"), 32, 1, &pid);
+	xcb_map_window(wm->conn, identity_window);
+
+	/**
+	 * we request to become the owner then we check if we successfully
+	 * become the owner.
+	 **/
+	xcb_set_selection_owner(wm->conn, identity_window, wm_sn_atom, XCB_CURRENT_TIME);
+	xcb_set_selection_owner(wm->conn, identity_window, cm_sn_atom, XCB_CURRENT_TIME);
+
 	xcb_change_window_attributes(wm->conn, screen->root, XCB_CW_EVENT_MASK, &values);
 	xcb_flush(wm->conn);
 	pthread_mutex_unlock(&wm->init_conn);

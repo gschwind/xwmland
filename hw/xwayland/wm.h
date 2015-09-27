@@ -219,5 +219,21 @@ window_manager_create(ScreenPtr screen);
 void
 window_manager_window_read_properties(struct xwl_window *window);
 
+#define ICCCM_WITHDRAWN_STATE	0
+#define ICCCM_NORMAL_STATE	1
+#define ICCCM_ICONIC_STATE	3
+
+void
+window_manager_window_set_wm_state(struct xwl_window *window, int32_t state);
+
+void
+window_manager_window_set_net_wm_state(struct xwl_window *window);
+
+void
+window_manager_window_set_virtual_desktop(struct xwl_window *window,
+				     int desktop);
+
+void
+window_manager_window_draw_decoration(struct xwl_window *xwl_window);
 
 #endif /* HW_XWAYLAND_WM_H_ */

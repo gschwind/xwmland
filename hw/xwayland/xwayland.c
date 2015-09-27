@@ -312,6 +312,7 @@ void enter(void *data,
 	      struct wl_output *output) {
 	//weston_wm_window_activate(data);
 	LogWrite(0, "%s\n", __PRETTY_FUNCTION__);
+
 }
 
 static
@@ -438,25 +439,14 @@ xwl_realize_window(WindowPtr window)
 	if(!attr.override) {
 		values[0] = screen->blackPixel;
 		values[1] = screen->blackPixel;
-		values[2] =
-				KeyPressMask|
-				KeyReleaseMask|
-				ButtonPressMask|
-				ButtonReleaseMask|
-				PointerMotionMask|
-				EnterWindowMask|
-				LeaveWindowMask|
-				SubstructureNotifyMask|
-				SubstructureRedirectMask;
-
-		values[3] = xwl_screen->wm->colormap_id;
+		values[2] = xwl_screen->wm->colormap_id;
 
 		xwl_window->frame_window = CreateWindow(FakeClientID(0), screen->root,
 				0, 0,
 				frame_width(xwl_window->frame),
 				frame_height(xwl_window->frame),
 				0, InputOutput,
-				CWBackPixel|CWBorderPixel|CWEventMask|CWColormap, values,
+				CWBackPixel|CWBorderPixel|CWColormap, values,
 				32, serverClient, xwl_screen->wm->visual->vid, &err);
 
 		LogWrite(0, "Frame = %p, err = %d\n", xwl_window->frame_window, err);
@@ -491,31 +481,9 @@ xwl_realize_window(WindowPtr window)
 			return ret;
 		}
 
-		sbuff = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, frame_width(xwl_window->frame), frame_height(xwl_window->frame));
-		cr = cairo_create(sbuff);
-		frame_repaint(xwl_window->frame, cr);
-		cairo_destroy(cr);
-
-		pixmap = (*screen->GetWindowPixmap)(xwl_window->frame_window);
-		xwl_pixmap = xwl_pixmap_get(pixmap);
-
-		out = cairo_image_surface_create_for_data(xwl_pixmap->data, CAIRO_FORMAT_ARGB32, pixmap->drawable.width, pixmap->drawable.height, pixmap->devKind);
-		cr = cairo_create(out);
-		rects = pixman_region_rectangles(&(xwl_window->frame_window->clipList), &nrect);
-		LogWrite(0, "nrect %d\n", nrect);
-		for(i = 0; i < nrect; ++i) {
-			cairo_rectangle(cr, rects[i].x1, rects[i].y1, rects[i].x2 - rects[i].x1, rects[i].y2 - rects[i].y1);
-			cairo_clip(cr);
-			cairo_set_source_surface(cr, sbuff, 0, 0);
-			cairo_paint(cr);
-			cairo_rectangle(cr, rects[i].x1 + 0.5, rects[i].y1 + 0.5, rects[i].x2 - rects[i].x1 - 1.0, rects[i].y2 - rects[i].y1 - 1.0);
-			cairo_set_source_rgb(cr, 1, 0, 1);
-			cairo_stroke(cr);
-		}
-
-		cairo_destroy(cr);
-		cairo_surface_destroy(out);
-		cairo_surface_destroy(sbuff);
+		window_manager_window_set_wm_state(xwl_window, ICCCM_NORMAL_STATE);
+		window_manager_window_set_net_wm_state(xwl_window);
+		window_manager_window_set_virtual_desktop(xwl_window, 0);
 
 		xwl_window->surface = wl_compositor_create_surface(xwl_screen->compositor);
 		wl_surface_add_listener(xwl_window->surface, &surface_listener, xwl_window);
@@ -523,6 +491,9 @@ xwl_realize_window(WindowPtr window)
 		wl_shell_surface_add_listener(xwl_window->shell_surface, &shell_surface_listener, xwl_window);
 
 		wl_shell_surface_set_toplevel(xwl_window->shell_surface);
+
+		if(xwl_window->name)
+			wl_shell_surface_set_title(xwl_window->shell_surface, xwl_window->name);
 
 		wl_display_flush(xwl_screen->display);
 		wl_surface_set_user_data(xwl_window->surface, xwl_window);
@@ -536,6 +507,8 @@ xwl_realize_window(WindowPtr window)
 		DamageSetReportAfterOp(xwl_window->damage, TRUE);
 
 		xorg_list_init(&xwl_window->link_damage);
+
+	} else {
 
 	}
 

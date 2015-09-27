@@ -35,9 +35,19 @@
 #include <cairo.h>
 #include "cairo-util.h"
 
-#include "helpers.h"
+//#include "helpers.h"
 //#include "image-loader.h"
 //#include "config-parser.h"
+
+/**
+ * Compile-time computation of number of items in a hardcoded array.
+ *
+ * @param a the array being measured.
+ * @return the number of items hardcoded into the array.
+ */
+#ifndef ARRAY_LENGTH
+#define ARRAY_LENGTH(a) (sizeof (a) / sizeof (a)[0])
+#endif
 
 void
 surface_flush_device(cairo_surface_t *surface)
@@ -512,14 +522,14 @@ theme_render_frame(struct theme *t,
 		if (flags & THEME_FRAME_ACTIVE) {
 			cairo_move_to(cr, x + 1, y  + 1);
 			cairo_set_source_rgb(cr, 1, 1, 1);
-			cairo_show_text(cr, "title");
+			cairo_show_text(cr, title);
 			cairo_move_to(cr, x, y);
 			cairo_set_source_rgb(cr, 0, 0, 0);
-			cairo_show_text(cr, "title");
+			cairo_show_text(cr, title);
 		} else {
 			cairo_move_to(cr, x, y);
 			cairo_set_source_rgb(cr, 0.4, 0.4, 0.4);
-			cairo_show_text(cr, "title");
+			cairo_show_text(cr, title);
 		}
 	}
 }
