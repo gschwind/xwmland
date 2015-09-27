@@ -1,11 +1,32 @@
 /*
- * wm.c
+ * Copyright © 2011 Intel Corporation
+ * Copyright © 2015 Benoit Gschwind <gschwind@gnu-log.net>
  *
- *  Created on: 26 sept. 2015
- *      Author: gschwind
+ * Permission is hereby granted, free of charge, to any person obtaining
+ * a copy of this software and associated documentation files (the
+ * "Software"), to deal in the Software without restriction, including
+ * without limitation the rights to use, copy, modify, merge, publish,
+ * distribute, sublicense, and/or sell copies of the Software, and to
+ * permit persons to whom the Software is furnished to do so, subject to
+ * the following conditions:
+ *
+ * The above copyright notice and this permission notice (including the
+ * next paragraph) shall be included in all copies or substantial
+ * portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+ * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+ * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+ * NONINFRINGEMENT.  IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS
+ * BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
+ * ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+ * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
  */
 
+
 #include "wm.h"
+#include "xwm/hash.h"
 
 #include <unistd.h>
 #include <pthread.h>
@@ -16,8 +37,7 @@
 #include <compositeext.h>
 #include <glx_extinit.h>
 #include <screenint.h>
-
-extern const char *display;
+#include <propertyst.h>
 
 static void
 window_manager_get_resources(struct window_manager *wm)
@@ -100,6 +120,155 @@ window_manager_get_resources(struct window_manager *wm)
 
 }
 
+/* We reuse some predefined, but otherwise useles atoms */
+#define TYPE_WM_PROTOCOLS	XCB_ATOM_CUT_BUFFER0
+#define TYPE_MOTIF_WM_HINTS	XCB_ATOM_CUT_BUFFER1
+#define TYPE_NET_WM_STATE	XCB_ATOM_CUT_BUFFER2
+#define TYPE_WM_NORMAL_HINTS	XCB_ATOM_CUT_BUFFER3
+
+void
+window_manager_window_read_properties(struct xwl_window *window)
+{
+	struct window_manager *wm = window->xwl_screen->wm;
+
+#define F(field) offsetof(struct xwl_window, field)
+	const struct {
+		xcb_atom_t atom;
+		xcb_atom_t type;
+		int offset;
+	} props[] = {
+		{ XCB_ATOM_WM_CLASS, XCB_ATOM_STRING, F(class) },
+		{ XCB_ATOM_WM_NAME, XCB_ATOM_STRING, F(name) },
+		{ XCB_ATOM_WM_TRANSIENT_FOR, XCB_ATOM_WINDOW, F(transient_for) },
+		{ wm->atom.wm_protocols, TYPE_WM_PROTOCOLS, F(protocols) },
+		{ wm->atom.wm_normal_hints, TYPE_WM_NORMAL_HINTS, F(protocols) },
+		{ wm->atom.net_wm_state, TYPE_NET_WM_STATE },
+		{ wm->atom.net_wm_window_type, XCB_ATOM_ATOM, F(type) },
+		{ wm->atom.net_wm_name, XCB_ATOM_STRING, F(name) },
+		{ wm->atom.net_wm_pid, XCB_ATOM_CARDINAL, F(pid) },
+		{ wm->atom.motif_wm_hints, TYPE_MOTIF_WM_HINTS, 0 },
+		{ wm->atom.wm_client_machine, XCB_ATOM_WM_CLIENT_MACHINE, F(machine) },
+	};
+#undef F
+
+	void *p;
+	uint32_t *xid;
+	xcb_atom_t *atom;
+	uint32_t i;
+	char name[1024];
+
+	if (!window->properties_dirty)
+		return;
+	window->properties_dirty = 0;
+
+	window->decorate = window->override_redirect ? 0 : MWM_DECOR_EVERYTHING;
+	window->size_hints.flags = 0;
+	window->motif_hints.flags = 0;
+	window->delete_window = 0;
+
+	for (i = 0; i < ARRAY_LENGTH(props); i++) {
+		PropertyPtr prop;
+		dixLookupProperty(&prop, window->window, props[i].atom, serverClient, DixReadAccess);
+
+		if(!prop)
+			continue;
+
+		if (prop->type == XCB_ATOM_NONE) {
+			/* No such property */
+			continue;
+		}
+
+		p = ((char *) window + props[i].offset);
+
+		switch (props[i].type) {
+		case XCB_ATOM_WM_CLIENT_MACHINE:
+		case XCB_ATOM_STRING:
+			/* FIXME: We're using this for both string and
+			   utf8_string */
+			if (*(char **) p)
+				free(*(char **) p);
+
+			*(char **) p =
+				strndup(prop->data, prop->size);
+			break;
+		case XCB_ATOM_WINDOW:
+			xid = prop->data;
+			*(struct xwl_window**)p = hash_table_lookup(window->xwl_screen->window_hash, *xid);
+			if (!*(struct xwl_window**)p)
+				LogWrite(0, "XCB_ATOM_WINDOW contains window"
+					   " id not found in hash table.\n");
+			break;
+		case XCB_ATOM_CARDINAL:
+		case XCB_ATOM_ATOM:
+			*(xcb_atom_t *) p = *((xcb_atom_t *)prop->data);
+			break;
+		case TYPE_WM_PROTOCOLS:
+			atom = prop->data;
+			for (i = 0; i < prop->size; i++)
+				if (atom[i] == wm->atom.wm_delete_window) {
+					window->delete_window = 1;
+					break;
+				}
+			break;
+		case TYPE_WM_NORMAL_HINTS:
+			memcpy(&window->size_hints,
+			       prop->data,
+			       sizeof window->size_hints);
+			break;
+		case TYPE_NET_WM_STATE:
+			window->fullscreen = 0;
+			atom = prop->data;
+			for (i = 0; i < prop->size; i++) {
+				if (atom[i] == wm->atom.net_wm_state_fullscreen)
+					window->fullscreen = 1;
+				if (atom[i] == wm->atom.net_wm_state_maximized_vert)
+					window->maximized_vert = 1;
+				if (atom[i] == wm->atom.net_wm_state_maximized_horz)
+					window->maximized_horz = 1;
+			}
+			break;
+		case TYPE_MOTIF_WM_HINTS:
+			memcpy(&window->motif_hints,
+			       prop->data,
+			       sizeof window->motif_hints);
+			if (window->motif_hints.flags & MWM_HINTS_DECORATIONS) {
+				if (window->motif_hints.decorations & MWM_DECOR_ALL)
+					/* MWM_DECOR_ALL means all except the other values listed. */
+					window->decorate =
+						MWM_DECOR_EVERYTHING & (~window->motif_hints.decorations);
+				else
+					window->decorate =
+						window->motif_hints.decorations;
+			}
+			break;
+		default:
+			break;
+		}
+	}
+
+	if (window->pid > 0) {
+		gethostname(name, sizeof(name));
+		for (i = 0; i < sizeof(name); i++) {
+			if (name[i] == '\0')
+				break;
+		}
+		if (i == sizeof(name))
+			name[0] = '\0'; /* ignore stupid hostnames */
+
+		/* this is only one heuristic to guess the PID of a client is
+		* valid, assuming it's compliant with icccm and ewmh.
+		* Non-compliants and remote applications of course fail. */
+		if (!window->machine || strcmp(window->machine, name))
+			window->pid = 0;
+	}
+
+	//if (window->frame && window->name)
+	//	wl_shell_surface_set_title(window->shell_surface, window->name);
+	//if (window->pid > 0)
+	//	wl_shell_surface_set_pid(window->shell_surface, window->pid);
+
+}
+
 static void
 window_manager_get_visual_and_colormap(struct window_manager *wm)
 {
@@ -143,18 +312,93 @@ window_manager_block_handler(void *data, struct timeval **tv, void *read_mask)
 }
 
 static void
+window_manager_handle_event(struct window_manager *wm)
+{
+	xcb_generic_event_t *event;
+	while ((event = xcb_poll_for_event(wm->conn)) != 0) {
+//		if (weston_wm_handle_selection_event(wm, event)) {
+//			free(event);
+//			count++;
+//			continue;
+//		}
+//
+//		if (weston_wm_handle_dnd_event(wm, event)) {
+//			free(event);
+//			count++;
+//			continue;
+//		}
+//
+		switch (event->response_type) {
+//		case XCB_BUTTON_PRESS:
+//		case XCB_BUTTON_RELEASE:
+//			weston_wm_handle_button(wm, event);
+//			break;
+//		case XCB_ENTER_NOTIFY:
+//			weston_wm_handle_enter(wm, event);
+//			break;
+//		case XCB_LEAVE_NOTIFY:
+//			weston_wm_handle_leave(wm, event);
+//			break;
+//		case XCB_MOTION_NOTIFY:
+//			weston_wm_handle_motion(wm, event);
+//			break;
+//		case XCB_CREATE_NOTIFY:
+//			weston_wm_handle_create_notify(wm, event);
+//			break;
+//		case XCB_MAP_REQUEST:
+//			weston_wm_handle_map_request(wm, event);
+//			break;
+//		case XCB_MAP_NOTIFY:
+//			weston_wm_handle_map_notify(wm, event);
+//			break;
+//		case XCB_UNMAP_NOTIFY:
+//			weston_wm_handle_unmap_notify(wm, event);
+//			break;
+//		case XCB_REPARENT_NOTIFY:
+//			weston_wm_handle_reparent_notify(wm, event);
+//			break;
+//		case XCB_CONFIGURE_REQUEST:
+//			weston_wm_handle_configure_request(wm, event);
+//			break;
+//		case XCB_CONFIGURE_NOTIFY:
+//			weston_wm_handle_configure_notify(wm, event);
+//			break;
+//		case XCB_DESTROY_NOTIFY:
+//			weston_wm_handle_destroy_notify(wm, event);
+//			break;
+//		case XCB_MAPPING_NOTIFY:
+//			LogWrite(0, "XCB_MAPPING_NOTIFY\n");
+//			break;
+//		case XCB_PROPERTY_NOTIFY:
+//			weston_wm_handle_property_notify(wm, event);
+//			break;
+//		case XCB_CLIENT_MESSAGE:
+//			weston_wm_handle_client_message(wm, event);
+//			break;
+//		case XCB_FOCUS_IN:
+//			weston_wm_handle_focus_in(wm, event);
+//			break;
+		case 0:
+			LogWrite(0, "Error ocurrent\n");
+			break;
+		}
+
+		xcb_flush(wm->conn);
+		free(event);
+	}
+
+}
+
+
+static void
 window_manager_wakeup_handler(void *data, int err, void *read_mask)
 {
 	struct window_manager *wm = data;
-	xcb_generic_event_t * event;
 
     if (err < 0)
         return;
 
-	while ((event = xcb_poll_for_event(wm->conn)) != 0) {
-		LogWrite(0, "event\n");
-		free(event);
-	}
+    window_manager_handle_event(wm);
 
 }
 

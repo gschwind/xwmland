@@ -371,10 +371,11 @@ xwl_realize_window(WindowPtr window)
 	cairo_surface_t * out;
 	cairo_t * cr;
 	pixman_box16_t * rects;
-	int nrect, i;
+	int nrect = 0, i;
 	PixmapPtr pixmap;
 	struct xwl_pixmap * xwl_pixmap;
 	xGetWindowAttributesReply attr;
+	int buttons = FRAME_BUTTON_CLOSE;
 
 	LogWrite(0, "xwl_realize_window %d\n", window->drawable.id);
 
@@ -411,12 +412,21 @@ xwl_realize_window(WindowPtr window)
 	/* register this window */
 	LogWrite(0, "create xwl_window for %d\n", window->drawable.id);
 	xwl_window = calloc(sizeof *xwl_window, 1);
+	xwl_window->xwl_screen = xwl_screen;
+	xwl_window->window = window;
+	xwl_window->surface = NULL;
+	xwl_window->shell_surface = NULL;
+
+	window_manager_window_read_properties(xwl_window);
 
 	LogWrite(0, "external client %d\n", window->drawable.id);
 
+	if (xwl_window->decorate & MWM_DECOR_MAXIMIZE)
+		buttons |= FRAME_BUTTON_MAXIMIZE;
+
 	xwl_window->frame = frame_create(xwl_screen->wm->theme,
 			window->drawable.width,
-			window->drawable.height, 0, "title");
+			window->drawable.height, buttons, xwl_window->name);
 
 	frame_resize_inside(xwl_window->frame, window->drawable.width, window->drawable.height);
 	frame_interior(xwl_window->frame, &x, &y, NULL, NULL);
@@ -451,12 +461,6 @@ xwl_realize_window(WindowPtr window)
 
 		LogWrite(0, "Frame = %p, err = %d\n", xwl_window->frame_window, err);
 
-
-		xwl_window->xwl_screen = xwl_screen;
-		xwl_window->window = window;
-		xwl_window->surface = NULL;
-		xwl_window->shell_surface = NULL;
-
 		ReparentWindow(window, xwl_window->frame_window, x, y, serverClient);
 		MapWindow(window, serverClient);
 
@@ -469,6 +473,7 @@ xwl_realize_window(WindowPtr window)
 
 		/** Immediately redirect this window **/
 		compRedirectWindow(serverClient, xwl_window->frame_window, CompositeRedirectManual);
+
 
 		if (xwl_window->frame_window->redirectDraw != RedirectDrawManual) {
 			LogWrite(0, "unexpected redirect: ");
@@ -496,15 +501,16 @@ xwl_realize_window(WindowPtr window)
 
 		out = cairo_image_surface_create_for_data(xwl_pixmap->data, CAIRO_FORMAT_ARGB32, pixmap->drawable.width, pixmap->drawable.height, pixmap->devKind);
 		cr = cairo_create(out);
-		cairo_set_source_rgb(cr, 0, 0, 0);
-		cairo_paint(cr);
-
 		rects = pixman_region_rectangles(&(xwl_window->frame_window->clipList), &nrect);
+		LogWrite(0, "nrect %d\n", nrect);
 		for(i = 0; i < nrect; ++i) {
 			cairo_rectangle(cr, rects[i].x1, rects[i].y1, rects[i].x2 - rects[i].x1, rects[i].y2 - rects[i].y1);
 			cairo_clip(cr);
 			cairo_set_source_surface(cr, sbuff, 0, 0);
 			cairo_paint(cr);
+			cairo_rectangle(cr, rects[i].x1 + 0.5, rects[i].y1 + 0.5, rects[i].x2 - rects[i].x1 - 1.0, rects[i].y2 - rects[i].y1 - 1.0);
+			cairo_set_source_rgb(cr, 1, 0, 1);
+			cairo_stroke(cr);
 		}
 
 		cairo_destroy(cr);
