@@ -54,6 +54,8 @@ struct xwl_screen {
     WindowPtr pointer_limbo_window;
     int expecting_event;
 
+    Bool realizing;
+
     int wm_fd;
     int listen_fds[5];
     int listen_fd_count;

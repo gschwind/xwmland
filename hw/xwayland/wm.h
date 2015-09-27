@@ -38,8 +38,11 @@
 struct window_manager {
 	ScreenPtr screen;
 	uint32_t lock_count;
-	pthread_t proc;
 	Bool running;
+
+	pthread_t init_conn_thread;
+	pthread_mutex_t init_conn;
+	int fd[2];
 
 	char * display;
 	int fd_display;

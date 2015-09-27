@@ -7,12 +7,17 @@
 
 #include "wm.h"
 
+#include <unistd.h>
+#include <pthread.h>
+#include <sys/socket.h>
 #include <selection.h>
 #include <micmap.h>
 #include <misyncshm.h>
 #include <compositeext.h>
 #include <glx_extinit.h>
 #include <screenint.h>
+
+extern const char *display;
 
 static void
 window_manager_get_resources(struct window_manager *wm)
@@ -126,13 +131,100 @@ window_manager_get_visual_and_colormap(struct window_manager *wm)
 
 }
 
+void
+initialize_connection(struct window_manager *wm) {
 
+}
+
+static void
+window_manager_block_handler(void *data, struct timeval **tv, void *read_mask)
+{
+
+}
+
+static void
+window_manager_wakeup_handler(void *data, int err, void *read_mask)
+{
+	struct window_manager *wm = data;
+	xcb_generic_event_t * event;
+
+    if (err < 0)
+        return;
+
+	while ((event = xcb_poll_for_event(wm->conn)) != 0) {
+		LogWrite(0, "event\n");
+		free(event);
+	}
+
+}
+
+static void
+window_manager_conn_wait_block_handler(void *data, struct timeval **tv, void *read_mask);
+
+
+static void
+window_manager_conn_wait_wakeup_handler(void *data, int err, void *read_mask);
+
+static void
+window_manager_conn_wait_block_handler(void *data, struct timeval **tv, void *read_mask)
+{
+	struct window_manager *wm = data;
+	if(pthread_mutex_trylock(&wm->init_conn) == 0) {
+		LogWrite(0, "%s: success\n", __PRETTY_FUNCTION__);
+		RemoveBlockAndWakeupHandlers(window_manager_conn_wait_block_handler, window_manager_conn_wait_wakeup_handler, wm);
+	    RegisterBlockAndWakeupHandlers(window_manager_block_handler, window_manager_wakeup_handler, wm);
+	    pthread_mutex_unlock(&wm->init_conn);
+	}
+}
+
+static void
+window_manager_conn_wait_wakeup_handler(void *data, int err, void *read_mask)
+{
+	struct window_manager *wm = data;
+	if(pthread_mutex_trylock(&wm->init_conn) == 0) {
+		LogWrite(0, "%s: success\n", __PRETTY_FUNCTION__);
+		RemoveBlockAndWakeupHandlers(window_manager_conn_wait_block_handler, window_manager_conn_wait_wakeup_handler, wm);
+	    RegisterBlockAndWakeupHandlers(window_manager_block_handler, window_manager_wakeup_handler, wm);
+	    pthread_mutex_unlock(&wm->init_conn);
+	}
+}
+
+static void *
+window_manager_init_conn(void * data) {
+	struct window_manager *wm = data;
+	uint32_t values = XCB_EVENT_MASK_SUBSTRUCTURE_NOTIFY|XCB_EVENT_MASK_PROPERTY_CHANGE;
+	xcb_screen_iterator_t s;
+	xcb_screen_t * screen;
+	int err;
+	wm->conn = xcb_connect_to_fd(wm->fd[0], NULL);
+	if((err = xcb_connection_has_error(wm->conn)) > 0) {
+		LogWrite(0, "Error %d\n", err);
+	}
+	s = xcb_setup_roots_iterator(xcb_get_setup(wm->conn));
+	screen = s.data;
+	xcb_change_window_attributes(wm->conn, screen->root, XCB_CW_EVENT_MASK, &values);
+	xcb_flush(wm->conn);
+	pthread_mutex_unlock(&wm->init_conn);
+	return NULL;
+}
+
+static CARD32
+add_client_fd(OsTimerPtr timer, CARD32 time, void *arg)
+{
+	struct window_manager*wm = arg;
+
+    if (!AddClientOnOpenFD(wm->fd[1]))
+        FatalError("Failed to add wm client\n");
+
+    TimerFree(timer);
+
+    return 0;
+}
 
 struct window_manager *
 window_manager_create(ScreenPtr screen)
 {
 	struct window_manager *wm;
-
 
 	wm = (struct window_manager *)calloc(1, sizeof *wm);
 	if (wm == NULL)
@@ -145,6 +237,17 @@ window_manager_create(ScreenPtr screen)
 
 	wm->theme = theme_create();
 
+	pthread_mutex_init(&wm->init_conn, NULL);
+	pthread_mutex_lock(&wm->init_conn);
+	pthread_create(&wm->init_conn_thread, NULL, window_manager_init_conn, wm);
+	pthread_detach(wm->init_conn_thread);
+
+	if(socketpair(AF_UNIX, SOCK_NONBLOCK | SOCK_STREAM | SOCK_CLOEXEC, 0, wm->fd) < 0) {
+		LogWrite(0, "Cannot pair socket\n");
+	}
+    RegisterBlockAndWakeupHandlers(window_manager_conn_wait_block_handler, window_manager_conn_wait_wakeup_handler, wm);
+
+    TimerSet(NULL, 0, 1, add_client_fd, wm);
 	return wm;
 }
 
