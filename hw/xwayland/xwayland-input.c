@@ -33,6 +33,10 @@
 #include <xserver-properties.h>
 #include <inpututils.h>
 
+#include "frame.h"
+#include "client-side-wm.h"
+#include "server-side-wm.h"
+
 static void
 xwl_pointer_control(DeviceIntPtr device, PtrCtrl *ctrl)
 {
@@ -945,8 +949,11 @@ InitInput(int argc, char *argv[])
     //AddEnabledDevice(XConnectionNumber(xnestDisplay));
     //RegisterBlockAndWakeupHandlers(xnestBlockHandler, xnestWakeupHandler, NULL);
 
+    xwl_screen->wm = window_manager_create();
+    xwl_screen->theme = theme_create();
 
-    xwl_screen->wm = window_manager_create(pScreen);
+    window_manager_get_resources(xwl_screen);
+    window_manager_get_visual_and_colormap(xwl_screen);
 
     LogWrite(0, "InitInput\n");
 

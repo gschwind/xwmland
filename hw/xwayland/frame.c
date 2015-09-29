@@ -539,8 +539,8 @@ frame_refresh_geometry(struct frame *frame)
 }
 
 void
-frame_interior(struct frame *frame, int32_t *x, int32_t *y,
-		int32_t *width, int32_t *height)
+frame_interior(struct frame *frame, uint32_t *x, uint32_t *y,
+		uint32_t *width, uint32_t *height)
 {
 	frame_refresh_geometry(frame);
 

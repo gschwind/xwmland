@@ -31,6 +31,8 @@
 
 #include <wayland-util.h>
 
+#include "frame.h"
+
 void
 surface_flush_device(cairo_surface_t *surface);
 
@@ -77,56 +79,13 @@ theme_render_frame(struct theme *t,
 		   const char *title, struct wl_list *buttons,
 		   uint32_t flags);
 
-enum theme_location {
-	THEME_LOCATION_INTERIOR = 0,
-	THEME_LOCATION_RESIZING_TOP = 1,
-	THEME_LOCATION_RESIZING_BOTTOM = 2,
-	THEME_LOCATION_RESIZING_LEFT = 4,
-	THEME_LOCATION_RESIZING_TOP_LEFT = 5,
-	THEME_LOCATION_RESIZING_BOTTOM_LEFT = 6,
-	THEME_LOCATION_RESIZING_RIGHT = 8,
-	THEME_LOCATION_RESIZING_TOP_RIGHT = 9,
-	THEME_LOCATION_RESIZING_BOTTOM_RIGHT = 10,
-	THEME_LOCATION_RESIZING_MASK = 15,
-	THEME_LOCATION_EXTERIOR = 16,
-	THEME_LOCATION_TITLEBAR = 17,
-	THEME_LOCATION_CLIENT_AREA = 18,
-};
+
 
 enum theme_location
 theme_get_location(struct theme *t, int x, int y, int width, int height, int flags);
 
 struct frame;
 
-enum frame_status {
-	FRAME_STATUS_NONE = 0,
-	FRAME_STATUS_REPAINT = 0x1,
-	FRAME_STATUS_MINIMIZE = 0x2,
-	FRAME_STATUS_MAXIMIZE = 0x4,
-	FRAME_STATUS_CLOSE = 0x8,
-	FRAME_STATUS_MENU = 0x10,
-	FRAME_STATUS_RESIZE = 0x20,
-	FRAME_STATUS_MOVE = 0x40,
-	FRAME_STATUS_ALL = 0x7f
-};
-
-enum frame_flag {
-	FRAME_FLAG_ACTIVE = 0x1,
-	FRAME_FLAG_MAXIMIZED = 0x2
-};
-
-enum {
-	FRAME_BUTTON_NONE = 0,
-	FRAME_BUTTON_CLOSE = 0x1,
-	FRAME_BUTTON_MAXIMIZE = 0x2,
-	FRAME_BUTTON_MINIMIZE = 0x4,
-	FRAME_BUTTON_ALL = 0x7
-};
-
-enum frame_button_state {
-	FRAME_BUTTON_RELEASED = 0,
-	FRAME_BUTTON_PRESSED = 1
-};
 
 struct frame *
 frame_create(struct theme *t, int32_t width, int32_t height, uint32_t buttons,
@@ -162,8 +121,8 @@ int32_t
 frame_height(struct frame *frame);
 
 void
-frame_interior(struct frame *frame, int32_t *x, int32_t *y,
-	       int32_t *width, int32_t *height);
+frame_interior(struct frame *frame, uint32_t *x, uint32_t *y,
+	       uint32_t *width, uint32_t *height);
 void
 frame_input_rect(struct frame *frame, int32_t *x, int32_t *y,
 		 int32_t *width, int32_t *height);

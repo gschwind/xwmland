@@ -33,87 +33,14 @@
 #include <errno.h>
 
 #include <wayland-client.h>
-
-#include <X11/X.h>
-
 #include <fb.h>
 #include <input.h>
 #include <dix.h>
 #include <randrstr.h>
 #include <exevents.h>
 
+#include "xwl_screen.h"
 #include "xwl_window.h"
-#include "wm.h"
-
-struct xwl_screen {
-	int lock_count;
-
-    int width;
-    int height;
-    int depth;
-    ScreenPtr screen;
-    WindowPtr pointer_limbo_window;
-    int expecting_event;
-
-    Bool realizing;
-
-    int wm_fd;
-    int listen_fds[5];
-    int listen_fd_count;
-    int rootless;
-    int glamor;
-
-    CreateScreenResourcesProcPtr CreateScreenResources;
-    CloseScreenProcPtr CloseScreen;
-    CreateWindowProcPtr CreateWindow;
-    DestroyWindowProcPtr DestroyWindow;
-    RealizeWindowProcPtr RealizeWindow;
-    UnrealizeWindowProcPtr UnrealizeWindow;
-
-    ClipNotifyProcPtr ClipNotify;
-    WindowExposuresProcPtr WindowExposures;
-    ClearToBackgroundProcPtr ClearToBackground;
-
-    struct xorg_list output_list;
-    struct xorg_list seat_list;
-    struct xorg_list damage_window_list;
-
-    pthread_mutex_t window_hash_lock;
-    struct hash_table * window_hash;
-
-    int wayland_fd;
-    struct wl_display *display;
-    struct wl_registry *registry;
-    struct wl_registry *input_registry;
-    struct wl_compositor *compositor;
-    struct wl_shm *shm;
-    struct wl_shell *shell;
-
-    uint32_t serial;
-
-#define XWL_FORMAT_ARGB8888 (1 << 0)
-#define XWL_FORMAT_XRGB8888 (1 << 1)
-#define XWL_FORMAT_RGB565   (1 << 2)
-
-    int prepare_read;
-
-    char *device_name;
-    int drm_fd;
-    int fd_render_node;
-    struct wl_drm *drm;
-    uint32_t formats;
-    uint32_t capabilities;
-    void *egl_display, *egl_context;
-    struct gbm_device *gbm;
-    struct glamor_context *glamor_ctx;
-
-    pthread_mutex_t callback_queue_lock;
-    struct xorg_list callback_queue;
-
-    struct window_manager * wm;
-
-};
-
 
 
 #define MODIFIER_META 0x01
