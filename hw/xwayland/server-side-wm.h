@@ -27,6 +27,19 @@ typedef int Bool;
 struct xwl_screen;
 struct xwl_window;
 struct window_manager;
+enum theme_location;
+
+enum cursor_type {
+	XWM_CURSOR_TOP,
+	XWM_CURSOR_BOTTOM,
+	XWM_CURSOR_LEFT,
+	XWM_CURSOR_RIGHT,
+	XWM_CURSOR_TOP_LEFT,
+	XWM_CURSOR_TOP_RIGHT,
+	XWM_CURSOR_BOTTOM_LEFT,
+	XWM_CURSOR_BOTTOM_RIGHT,
+	XWM_CURSOR_LEFT_PTR,
+};
 
 void register_wm_callback(struct window_manager * wm);
 void window_manager_get_resources(struct xwl_screen *wm);
@@ -36,6 +49,7 @@ void window_manager_window_set_net_wm_state(struct xwl_window *window);
 void window_manager_window_set_virtual_desktop(struct xwl_window *window, int desktop);
 void window_manager_window_read_properties(struct xwl_window *window);
 void send_wm_delete_window(struct xwl_window * xwl_window);
-
+void xwl_window_draw_decoration(struct xwl_window *xwl_window);
+int get_cursor_for_location(enum theme_location location);
 
 #endif /* HW_XWAYLAND_SERVER_SIDE_WM_H_ */

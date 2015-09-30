@@ -305,9 +305,6 @@ xwl_pixmap_get(PixmapPtr pixmap)
 //
 //}
 
-static void
-xwl_window_draw_decoration(struct xwl_window *xwl_window);
-
 static Bool
 xwl_realize_window(WindowPtr window);
 
@@ -424,51 +421,7 @@ xwl_window_exposures(WindowPtr pWin, RegionPtr pRegion) {
 
 }
 
-static void
-xwl_window_draw_decoration(struct xwl_window *xwl_window) {
-	int ret;
-	GCPtr gc;
-	XID gcid;
-	char * data;
-	int nrects;
 
-	if(xwl_window->frame_window == NULL || xwl_window->frame == NULL) {
-		LogWrite(0, "unexpected call of xwl_window_draw_decoration\n");
-		return;
-	}
-
-	if(xwl_window->frame_window->redirectDraw != RedirectDrawManual) {
-		LogWrite(0, "NOT 0 RedirectDrawManual\n");
-		return;
-	}
-
-	/* TODO: change the API to alloc buffer here */
-	data = window_manager_window_draw_frame(xwl_window->frame);
-
-	gcid = FakeClientID(0);
-	gc = CreateGC(&(xwl_window->frame_window->drawable), 0, NULL, &ret, gcid, serverClient);
-
-	/* MANDATORY, will finish the creation of the GC */
-	ValidateGC(&(xwl_window->frame_window->drawable), gc);
-
-	/* write the buffer to the window */
-	(*gc->ops->PutImage)(
-			&(xwl_window->frame_window->drawable),
-			gc,
-			32,
-			0,
-			0,
-			frame_width(xwl_window->frame),
-			frame_height(xwl_window->frame),
-			0,
-			ZPixmap,
-			(char*)data
-			);
-
-	FreeGC((void*)gc, gcid);
-	free(data);
-
-}
 
 
 /*** NOT IN USE CURRENTLY ***/

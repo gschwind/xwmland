@@ -293,6 +293,24 @@ pointer_handle_motion(void *data, struct wl_pointer *pointer,
     QueuePointerEvents(xwl_seat->pointer, MotionNotify, 0,
                        POINTER_ABSOLUTE | POINTER_SCREEN, &mask);
 
+
+    {
+		struct xwl_window *window = xwl_seat->focus_window;
+		enum theme_location location;
+		int cursor;
+
+		if(!window->frame_window)
+			return;
+
+		location = frame_pointer_motion(window->frame, NULL,
+						sx, sy);
+		if (frame_status(window->frame) & FRAME_STATUS_REPAINT)
+			xwl_window_draw_decoration(window);
+
+		cursor = get_cursor_for_location(location);
+		//weston_wm_window_set_cursor(wm, window->frame_id, cursor);
+    }
+
 }
 
 static void
@@ -326,14 +344,16 @@ pointer_handle_button(void *data, struct wl_pointer *pointer, uint32_t serial,
     QueuePointerEvents(xwl_seat->pointer,
                        state ? ButtonPress : ButtonRelease, index, 0, &mask);
 
-    if(1) {
+    {
     	struct xwl_window * window = xwl_seat->focus_window;
 		enum theme_location location;
-		enum theme_location location_2;
 		int event_x = xwl_seat->last_pointer_x;
 		int event_y = xwl_seat->last_pointer_y;
 
 		LogWrite(0, "ButtonPress (%d,%d,%d)\n", event_x, event_y, state);
+
+		if(!window->frame_window)
+			return;
 
 		/* Make sure we're looking at the right location.  The frame
 		 * could have received a motion event from a pointer from a
@@ -342,12 +362,13 @@ pointer_handle_button(void *data, struct wl_pointer *pointer, uint32_t serial,
 		 * location before deciding what to do. */
 		location = frame_pointer_motion(window->frame, NULL,
 						event_x, event_y);
-		location_2 = frame_pointer_button(window->frame, NULL,
+		location = frame_pointer_button(window->frame, NULL,
 						button, state);
 		if(location == THEME_LOCATION_INTERIOR)
 			return;
 
-		//if (frame_status(window->frame) & FRAME_STATUS_REPAINT)
+		if (frame_status(window->frame) & FRAME_STATUS_REPAINT)
+			xwl_window_draw_decoration(window);
 		//	weston_wm_window_schedule_repaint(window);
 
 		if (frame_status(window->frame) & FRAME_STATUS_MOVE) {

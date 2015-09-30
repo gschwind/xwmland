@@ -15,6 +15,8 @@
 #include "xwl_window.h"
 
 #include "windowstr.h"
+#include "gc.h"
+#include "gcstruct.h"
 
 #include "property.h"
 #include "propertyst.h"
@@ -22,6 +24,80 @@
 #ifndef ARRAY_LENGTH
 #define ARRAY_LENGTH(a) (sizeof (a) / sizeof (a)[0])
 #endif
+
+int
+get_cursor_for_location(enum theme_location location)
+{
+	// int location = theme_get_location(t, x, y, width, height, 0);
+
+	switch (location) {
+		case THEME_LOCATION_RESIZING_TOP:
+			return XWM_CURSOR_TOP;
+		case THEME_LOCATION_RESIZING_BOTTOM:
+			return XWM_CURSOR_BOTTOM;
+		case THEME_LOCATION_RESIZING_LEFT:
+			return XWM_CURSOR_LEFT;
+		case THEME_LOCATION_RESIZING_RIGHT:
+			return XWM_CURSOR_RIGHT;
+		case THEME_LOCATION_RESIZING_TOP_LEFT:
+			return XWM_CURSOR_TOP_LEFT;
+		case THEME_LOCATION_RESIZING_TOP_RIGHT:
+			return XWM_CURSOR_TOP_RIGHT;
+		case THEME_LOCATION_RESIZING_BOTTOM_LEFT:
+			return XWM_CURSOR_BOTTOM_LEFT;
+		case THEME_LOCATION_RESIZING_BOTTOM_RIGHT:
+			return XWM_CURSOR_BOTTOM_RIGHT;
+		case THEME_LOCATION_EXTERIOR:
+		case THEME_LOCATION_TITLEBAR:
+		default:
+			return XWM_CURSOR_LEFT_PTR;
+	}
+}
+
+void
+xwl_window_draw_decoration(struct xwl_window *xwl_window) {
+	int ret;
+	GCPtr gc;
+	XID gcid;
+	char * data;
+
+	if(xwl_window->frame_window == NULL || xwl_window->frame == NULL) {
+		LogWrite(0, "unexpected call of xwl_window_draw_decoration\n");
+		return;
+	}
+
+	if(xwl_window->frame_window->redirectDraw != RedirectDrawManual) {
+		LogWrite(0, "NOT 0 RedirectDrawManual\n");
+		return;
+	}
+
+	/* TODO: change the API to alloc buffer here */
+	data = window_manager_window_draw_frame(xwl_window->frame);
+
+	gcid = FakeClientID(0);
+	gc = CreateGC(&(xwl_window->frame_window->drawable), 0, NULL, &ret, gcid, serverClient);
+
+	/* MANDATORY, will finish the creation of the GC */
+	ValidateGC(&(xwl_window->frame_window->drawable), gc);
+
+	/* write the buffer to the window */
+	(*gc->ops->PutImage)(
+			&(xwl_window->frame_window->drawable),
+			gc,
+			32,
+			0,
+			0,
+			frame_width(xwl_window->frame),
+			frame_height(xwl_window->frame),
+			0,
+			ZPixmap,
+			(char*)data
+			);
+
+	FreeGC((void*)gc, gcid);
+	free(data);
+
+}
 
 void send_wm_delete_window(struct xwl_window * xwl_window) {
 	DeviceIntPtr dev;
