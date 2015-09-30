@@ -413,6 +413,13 @@ xwl_window_exposures(WindowPtr pWin, RegionPtr pRegion) {
     if(xwl_window->frame_window != pWin)
     	return;
 
+	rects = pixman_region_rectangles(&(pWin->clipList), &nrects);
+	LogWrite(0, "nrect %d :", nrects);
+	for(i = 0; i < nrects; i++) {
+		LogWrite(0, " (%d,%d,%d,%d)", rects[i].x1, rects[i].x2, rects[i].y1, rects[i].y2);
+	}
+	LogWrite(0, "\n");
+
     xwl_window_draw_decoration(xwl_window);
 
 }
@@ -425,40 +432,49 @@ xwl_window_draw_decoration(struct xwl_window *xwl_window) {
 	XID gcid;
 	char * data;
 	struct xwl_pixmap *xwl_pixmap;
+	int nrects;
+	pixman_box16_t * rects;
 
-	LogWrite(0, "sizeof(WindowRec) = %ld\n", sizeof(WindowRec));
+	rects = pixman_region_rectangles(&(xwl_window->frame_window->clipList), &nrects);
+//	LogWrite(0, "nrect %d :", nrects);
+//	for(i = 0; i < nrects; i++) {
+//		LogWrite(0, " (%d,%d,%d,%d)", rects[i].x1, rects[i].x2, rects[i].y1, rects[i].y2);
+//	}
+//	LogWrite(0, "\n");
 
+
+//	LogWrite(0, "sizeof(WindowRec) = %ld\n", sizeof(WindowRec));
+//
 	if(xwl_window->frame_window->redirectDraw != RedirectDrawManual) {
 		LogWrite(0, "NOT 0 RedirectDrawManual\n");
 		return;
 	}
-
-	data = window_manager_window_draw_frame(xwl_window->frame);
-	pPixmap = (*xwl_window->frame_window->drawable.pScreen->GetWindowPixmap)(xwl_window->frame_window);
-
-	xwl_pixmap = xwl_pixmap_get(pPixmap);
-
-    memcpy(xwl_pixmap->data, data, sizeof(uint32_t)*pPixmap->drawable.width*pPixmap->drawable.height);
-
-    //memset(xwl_pixmap->data, 0x00ff00ff, 4*pPixmap->drawable.width*pPixmap->drawable.height);
-
-//	gcid = FakeClientID(0);
-//	gc = CreateGC(&(pPixmap->drawable), 0, NULL, &ret, gcid, serverClient);
-//	LogWrite(0, "PutImage\n");
-//	(*gc->ops->PutImage)(
-//			&(pPixmap->drawable),
-//			gc,
-//			32,
-//			0,
-//			0,
-//			frame_width(xwl_window->frame),
-//			frame_height(xwl_window->frame),
-//			0,
-//			XYPixmap,
-//			(char*)data
-//			);
 //
-//	FreeGC((void*)gc, gcid);
+	data = window_manager_window_draw_frame(xwl_window->frame);
+//	pPixmap = (*xwl_window->frame_window->drawable.pScreen->GetWindowPixmap)(xwl_window->frame_window);
+//	xwl_pixmap = xwl_pixmap_get(pPixmap);
+//    memcpy(xwl_pixmap->data, data, sizeof(uint32_t)*pPixmap->drawable.width*pPixmap->drawable.height);
+
+	gcid = FakeClientID(0);
+	gc = CreateGC(&(xwl_window->frame_window->drawable), 0, NULL, &ret, gcid, serverClient);
+
+	ValidateGC(&(xwl_window->frame_window->drawable), gc);
+
+	LogWrite(0, "PutImage\n");
+	(*gc->ops->PutImage)(
+			&(xwl_window->frame_window->drawable),
+			gc,
+			32,
+			0,
+			0,
+			frame_width(xwl_window->frame),
+			frame_height(xwl_window->frame),
+			0,
+			ZPixmap,
+			(char*)data
+			);
+
+	FreeGC((void*)gc, gcid);
 	free(data);
 
 }

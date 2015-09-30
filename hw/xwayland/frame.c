@@ -946,5 +946,11 @@ frame_repaint(struct frame *frame, cairo_t *cr)
 	wl_list_for_each(button, &frame->buttons, link)
 		frame_button_repaint(button, cr);
 
+	cairo_save(cr);
+	cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
+	cairo_rectangle(cr, frame->interior.x, frame->interior.y, frame->interior.width, frame->interior.height);
+	cairo_set_source_rgb(cr, 0.0, 0.0, 0.0);
+	cairo_fill(cr);
+
 	frame_status_clear(frame, FRAME_STATUS_REPAINT);
 }
