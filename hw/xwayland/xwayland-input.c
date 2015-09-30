@@ -280,8 +280,8 @@ pointer_handle_motion(void *data, struct wl_pointer *pointer,
         return;
     }
 
-    dx = xwl_seat->focus_window->window->drawable.x;
-    dy = xwl_seat->focus_window->window->drawable.y;
+    dx = xwl_seat->focus_window->frame_window->drawable.x;
+    dy = xwl_seat->focus_window->frame_window->drawable.y;
 
     xwl_seat->last_pointer_x = sx;
     xwl_seat->last_pointer_y = sy;

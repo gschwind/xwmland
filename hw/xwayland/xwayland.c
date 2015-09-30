@@ -413,12 +413,12 @@ xwl_window_exposures(WindowPtr pWin, RegionPtr pRegion) {
     if(xwl_window->frame_window != pWin)
     	return;
 
-	rects = pixman_region_rectangles(&(pWin->clipList), &nrects);
-	LogWrite(0, "nrect %d :", nrects);
-	for(i = 0; i < nrects; i++) {
-		LogWrite(0, " (%d,%d,%d,%d)", rects[i].x1, rects[i].x2, rects[i].y1, rects[i].y2);
-	}
-	LogWrite(0, "\n");
+//	rects = pixman_region_rectangles(&(pWin->clipList), &nrects);
+//	LogWrite(0, "nrect %d :", nrects);
+//	for(i = 0; i < nrects; i++) {
+//		LogWrite(0, " (%d,%d,%d,%d)", rects[i].x1, rects[i].x2, rects[i].y1, rects[i].y2);
+//	}
+//	LogWrite(0, "\n");
 
     xwl_window_draw_decoration(xwl_window);
 
@@ -630,7 +630,7 @@ xwl_realize_window(WindowPtr window)
 			window->drawable.height, buttons, xwl_window->name);
 
 	frame_resize_inside(xwl_window->frame, window->drawable.width, window->drawable.height);
-	frame_interior(xwl_window->frame, &x, &y, NULL, NULL);
+	frame_interior(xwl_window->frame, &x, &y, (uint32_t*)NULL, (uint32_t*)NULL);
 
 	GetWindowAttributes(window, serverClient, &attr);
 
@@ -640,17 +640,14 @@ xwl_realize_window(WindowPtr window)
 		values[0] = 0;
 		ChangeWindowAttributes(xwl_window->window, CWBorderWidth, values, serverClient);
 
-		values[0] = screen->blackPixel;
-		values[1] = screen->blackPixel;
+		values[0] = 0x00ff00ff;
+		values[1] = 0x00ff00ff;
 		values[2] = 0;
 		values[3] = xwl_screen->colormap_id;
 
 		LogWrite(0, "Class : %d, XID: %d\n",
 				(int)xwl_screen->colormap->class,
 				(int)xwl_screen->colormap->mid);
-
-
-		//xwl_window->frame_window = xwl_window->window;
 
 		xwl_window->frame_window = CreateWindow(FakeClientID(0), screen->root,
 				0, 0,
@@ -1156,12 +1153,13 @@ xwl_screen_init(ScreenPtr pScreen, int argc, char **argv)
     xwl_screen->UnrealizeWindow = pScreen->UnrealizeWindow;
     pScreen->UnrealizeWindow = xwl_unrealize_window;
 
-    xwl_screen->ClearToBackground = pScreen->ClearToBackground;
-    pScreen->ClearToBackground = xwl_clear_to_background;
+//    xwl_screen->ClearToBackground = pScreen->ClearToBackground;
+//    pScreen->ClearToBackground = xwl_clear_to_background;
+//
+//    xwl_screen->ClipNotify = pScreen->ClipNotify;
+//    pScreen->ClipNotify = xwl_clip_notify;
 
-    xwl_screen->ClipNotify = pScreen->ClipNotify;
-    pScreen->ClipNotify = xwl_clip_notify;
-
+    /* Check exposure to ensure frame drawing */
     xwl_screen->WindowExposures = pScreen->WindowExposures;
     pScreen->WindowExposures = xwl_window_exposures;
 
