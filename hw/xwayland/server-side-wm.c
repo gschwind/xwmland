@@ -344,7 +344,7 @@ window_manager_window_read_properties(struct xwl_window *window)
 	void *p;
 	uint32_t *xid;
 	Atom *atom;
-	uint32_t i;
+	uint32_t i, k;
 	char name[1024];
 
 	if (!window->properties_dirty)
@@ -356,21 +356,31 @@ window_manager_window_read_properties(struct xwl_window *window)
 	window->motif_hints.flags = 0;
 	window->delete_window = 0;
 
-	for (i = 0; i < ARRAY_LENGTH(props); i++) {
-		PropertyPtr prop;
-		dixLookupProperty(&prop, window->client_window, props[i].atom, serverClient, DixReadAccess);
+	for (k = 0; k < ARRAY_LENGTH(props); k++) {
+		PropertyPtr prop = NULL;
+		int rc = 0;
 
-		if(!prop)
+		rc = dixLookupProperty(&prop, window->client_window, props[k].atom, serverClient, DixReadAccess);
+		if(rc) {
+			//LogWrite(0, "error while reading %s : %d\n", NameForAtom(props[k].atom), rc);
 			continue;
+		}
+
+		if(!prop) {
+			//LogWrite(0, "not found %s : %d\n", NameForAtom(props[k].atom), rc);
+			continue;
+		}
+
+		//LogWrite(0, "prop found %s(%s)\n", NameForAtom(prop->propertyName), NameForAtom(prop->type));
 
 		if (prop->type == None) {
 			/* No such property */
 			continue;
 		}
 
-		p = ((char *) window + props[i].offset);
+		p = ((char *) window + props[k].offset);
 
-		switch (props[i].type) {
+		switch (props[k].type) {
 		case XA_WM_CLIENT_MACHINE:
 		case XA_STRING:
 			/* FIXME: We're using this for both string and
@@ -382,11 +392,16 @@ window_manager_window_read_properties(struct xwl_window *window)
 				strndup(prop->data, prop->size);
 			break;
 		case XA_WINDOW:
+			LogWrite(0, "FOUND transient %d\n", xid);
 			xid = prop->data;
 			*(struct xwl_window**)p = hash_table_lookup(window->xwl_screen->window_hash, *xid);
+
 			if (!*(struct xwl_window**)p)
 				LogWrite(0, "XCB_ATOM_WINDOW contains window"
 					   " id not found in hash table.\n");
+			else
+				LogWrite(0, "FOUND transient %d\n", xid);
+
 			break;
 		case XA_CARDINAL:
 		case XA_ATOM:

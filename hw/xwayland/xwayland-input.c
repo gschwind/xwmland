@@ -280,8 +280,13 @@ pointer_handle_motion(void *data, struct wl_pointer *pointer,
         return;
     }
 
-    dx = xwl_seat->focus_window->frame_window->drawable.x;
-    dy = xwl_seat->focus_window->frame_window->drawable.y;
+    if(xwl_seat->focus_window->frame_window) {
+		dx = xwl_seat->focus_window->frame_window->drawable.x;
+		dy = xwl_seat->focus_window->frame_window->drawable.y;
+    } else {
+        dx = xwl_seat->focus_window->client_window->drawable.x;
+        dy = xwl_seat->focus_window->client_window->drawable.y;
+    }
 
     xwl_seat->last_pointer_x = sx;
     xwl_seat->last_pointer_y = sy;
@@ -299,7 +304,7 @@ pointer_handle_motion(void *data, struct wl_pointer *pointer,
 		enum theme_location location;
 		int cursor;
 
-		if(!window->frame_window)
+		if(!window || !window->frame_window)
 			return;
 
 		location = frame_pointer_motion(window->frame, NULL,

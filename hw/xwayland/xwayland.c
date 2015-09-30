@@ -571,6 +571,7 @@ xwl_realize_window(WindowPtr window)
 
 	if(!attr.override) {
 
+		xwl_window->properties_dirty = 1;
 		window_manager_window_read_properties(xwl_window);
 
 		LogWrite(0, "external client %d\n", window->drawable.id);
@@ -653,6 +654,7 @@ xwl_realize_window(WindowPtr window)
 
 	} else {
 
+		xwl_window->properties_dirty = 1;
 		window_manager_window_read_properties(xwl_window);
 		LogWrite(0, "Transient for %p\n", xwl_window->transient_for);
 
@@ -676,10 +678,43 @@ xwl_realize_window(WindowPtr window)
 
 		xwl_window->surface = wl_compositor_create_surface(xwl_screen->compositor);
 		wl_surface_add_listener(xwl_window->surface, &surface_listener, xwl_window);
+
 		xwl_window->shell_surface = wl_shell_get_shell_surface(xwl_screen->shell, xwl_window->surface);
 		wl_shell_surface_add_listener(xwl_window->shell_surface, &shell_surface_listener, xwl_window);
 
-		wl_shell_surface_set_toplevel(xwl_window->shell_surface);
+		if(xwl_window->transient_for) {
+			struct xwl_seat * xwl_seat_found = NULL;;
+			struct xwl_seat * xwl_seat;
+			int parent_x, parent_y;
+		    xorg_list_for_each_entry(xwl_seat, &xwl_screen->seat_list, link) {
+		    	if(xwl_seat->focus_window == xwl_window->transient_for) {
+		    		xwl_seat_found = xwl_seat;
+		    		break;
+		    	}
+		    }
+
+		    if(xwl_window->transient_for->frame_window) {
+		    	parent_x = xwl_window->transient_for->frame_window->origin.x;
+		    	parent_y = xwl_window->transient_for->frame_window->origin.y;
+		    } else {
+		    	parent_x = xwl_window->transient_for->client_window->origin.x;
+		    	parent_y = xwl_window->transient_for->client_window->origin.y;
+		    }
+
+		    if(xwl_seat_found) {
+		    	wl_shell_surface_set_popup(xwl_window->shell_surface,
+		    			xwl_seat_found->seat,
+						xwl_seat->pointer_enter_serial,
+						xwl_window->transient_for->surface,
+						xwl_window->client_window->origin.x - parent_x,
+						xwl_window->client_window->origin.y - parent_y,
+						0);
+		    } else {
+		    	wl_shell_surface_set_toplevel(xwl_window->shell_surface);
+		    }
+		} else {
+			wl_shell_surface_set_toplevel(xwl_window->shell_surface);
+		}
 
 		if(xwl_window->name)
 			wl_shell_surface_set_title(xwl_window->shell_surface, xwl_window->name);
@@ -740,7 +775,6 @@ xwl_unrealize_window(WindowPtr window)
     }
 
     hash_table_remove(xwl_screen->window_hash, xwl_window->client_window->drawable.id);
-
     if(xwl_window->frame_window)
     	hash_table_remove(xwl_screen->window_hash, xwl_window->frame_window->drawable.id);
 
@@ -751,6 +785,7 @@ xwl_unrealize_window(WindowPtr window)
     	wl_shell_surface_destroy(xwl_window->shell_surface);
 
     wl_surface_destroy(xwl_window->surface);
+
     if (RegionNotEmpty(DamageRegion(xwl_window->damage)))
         xorg_list_del(&xwl_window->link_damage);
     DamageUnregister(xwl_window->damage);
