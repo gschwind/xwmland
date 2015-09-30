@@ -126,6 +126,7 @@ struct xwl_screen {
 		Atom		 net_wm_moveresize;
 		Atom		 net_supporting_wm_check;
 		Atom		 net_supported;
+		Atom		 net_close_window;
 		Atom		 motif_wm_hints;
 		Atom		 clipboard;
 		Atom		 clipboard_manager;

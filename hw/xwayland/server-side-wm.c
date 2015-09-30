@@ -14,12 +14,37 @@
 #include "xwl_screen.h"
 #include "xwl_window.h"
 
+#include "windowstr.h"
+
 #include "property.h"
 #include "propertyst.h"
 
 #ifndef ARRAY_LENGTH
 #define ARRAY_LENGTH(a) (sizeof (a) / sizeof (a)[0])
 #endif
+
+void send_wm_delete_window(struct xwl_window * xwl_window) {
+	DeviceIntPtr dev;
+	xEvent e;
+
+	LogWrite(0, "send_wm_delete_window for %d\n", xwl_window->client_window->drawable.id);
+
+	e.u.u.type = ClientMessage;
+	e.u.u.detail = 32;
+	e.u.clientMessage.window = xwl_window->client_window->drawable.id;
+	e.u.clientMessage.u.l.type = xwl_window->xwl_screen->atom.wm_protocols;
+	e.u.clientMessage.u.l.longs0 = xwl_window->xwl_screen->atom.wm_delete_window;
+	e.u.clientMessage.u.l.longs1 = GetTimeInMillis();
+	e.u.clientMessage.u.l.longs2 = 0;
+	e.u.clientMessage.u.l.longs3 = 0;
+	e.u.clientMessage.u.l.longs4 = 0;
+
+	dev = PickPointer(serverClient);
+	DeliverEventsToWindow(dev, xwl_window->client_window,
+						  &e, 1, NoEventMask, NullGrab);
+
+}
+
 
 void window_manager_get_resources(struct xwl_screen *wm)
 {
@@ -67,6 +92,7 @@ void window_manager_get_resources(struct xwl_screen *wm)
 		{ "_NET_SUPPORTING_WM_CHECK",
 					F(atom.net_supporting_wm_check) },
 		{ "_NET_SUPPORTED",     F(atom.net_supported) },
+		{ "_NET_CLOSE_WINDOW",     F(atom.net_close_window) },
 		{ "_MOTIF_WM_HINTS",	F(atom.motif_wm_hints) },
 		{ "CLIPBOARD",		F(atom.clipboard) },
 		{ "CLIPBOARD_MANAGER",	F(atom.clipboard_manager) },
@@ -153,7 +179,7 @@ void window_manager_window_set_wm_state(struct xwl_window *window, int32_t state
 
 	property[0] = state;
 	property[1] = None;
-	ChangeWindowProperty(window->window,
+	ChangeWindowProperty(window->client_window,
 			wm->atom.wm_state,
 			wm->atom.wm_state,
 			32,
@@ -178,7 +204,7 @@ void window_manager_window_set_net_wm_state(struct xwl_window *window)
 	if (window->maximized_horz)
 		property[i++] = wm->atom.net_wm_state_maximized_horz;
 
-	ChangeWindowProperty(window->window,
+	ChangeWindowProperty(window->client_window,
 		    wm->atom.net_wm_state,
 			XA_ATOM,
 				32,
@@ -200,7 +226,7 @@ window_manager_window_set_virtual_desktop(struct xwl_window *window,
 	struct xwl_screen *wm = window->xwl_screen;
 
 	if (desktop >= 0) {
-		ChangeWindowProperty(window->window,
+		ChangeWindowProperty(window->client_window,
 				wm->atom.net_wm_desktop,
 				XA_CARDINAL,
 					32,
@@ -209,7 +235,7 @@ window_manager_window_set_virtual_desktop(struct xwl_window *window,
 					&desktop,
 					True);
 	} else {
-		DeleteProperty(serverClient, window->window, wm->atom.net_wm_desktop);
+		DeleteProperty(serverClient, window->client_window, wm->atom.net_wm_desktop);
 	}
 }
 
@@ -256,7 +282,7 @@ window_manager_window_read_properties(struct xwl_window *window)
 
 	for (i = 0; i < ARRAY_LENGTH(props); i++) {
 		PropertyPtr prop;
-		dixLookupProperty(&prop, window->window, props[i].atom, serverClient, DixReadAccess);
+		dixLookupProperty(&prop, window->client_window, props[i].atom, serverClient, DixReadAccess);
 
 		if(!prop)
 			continue;

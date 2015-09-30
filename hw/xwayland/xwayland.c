@@ -360,7 +360,7 @@ shell_surface_configure(void *data,
 	ConfigureWindow(xwl_window->frame_window, CWWidth|CWHeight, values, serverClient);
 
 	frame_interior(xwl_window->frame, &values[0], &values[1], &values[2], &values[3]);
-	ConfigureWindow(xwl_window->window, CWX|CWY|CWWidth|CWHeight, values, serverClient);
+	ConfigureWindow(xwl_window->client_window, CWX|CWY|CWWidth|CWHeight, values, serverClient);
 
 }
 
@@ -428,39 +428,30 @@ static void
 xwl_window_draw_decoration(struct xwl_window *xwl_window) {
 	int ret;
 	GCPtr gc;
-	PixmapPtr pPixmap;
 	XID gcid;
 	char * data;
-	struct xwl_pixmap *xwl_pixmap;
 	int nrects;
-	pixman_box16_t * rects;
 
-	rects = pixman_region_rectangles(&(xwl_window->frame_window->clipList), &nrects);
-//	LogWrite(0, "nrect %d :", nrects);
-//	for(i = 0; i < nrects; i++) {
-//		LogWrite(0, " (%d,%d,%d,%d)", rects[i].x1, rects[i].x2, rects[i].y1, rects[i].y2);
-//	}
-//	LogWrite(0, "\n");
+	if(xwl_window->frame_window == NULL || xwl_window->frame == NULL) {
+		LogWrite(0, "unexpected call of xwl_window_draw_decoration\n");
+		return;
+	}
 
-
-//	LogWrite(0, "sizeof(WindowRec) = %ld\n", sizeof(WindowRec));
-//
 	if(xwl_window->frame_window->redirectDraw != RedirectDrawManual) {
 		LogWrite(0, "NOT 0 RedirectDrawManual\n");
 		return;
 	}
-//
+
+	/* TODO: change the API to alloc buffer here */
 	data = window_manager_window_draw_frame(xwl_window->frame);
-//	pPixmap = (*xwl_window->frame_window->drawable.pScreen->GetWindowPixmap)(xwl_window->frame_window);
-//	xwl_pixmap = xwl_pixmap_get(pPixmap);
-//    memcpy(xwl_pixmap->data, data, sizeof(uint32_t)*pPixmap->drawable.width*pPixmap->drawable.height);
 
 	gcid = FakeClientID(0);
 	gc = CreateGC(&(xwl_window->frame_window->drawable), 0, NULL, &ret, gcid, serverClient);
 
+	/* MANDATORY, will finish the creation of the GC */
 	ValidateGC(&(xwl_window->frame_window->drawable), gc);
 
-	LogWrite(0, "PutImage\n");
+	/* write the buffer to the window */
 	(*gc->ops->PutImage)(
 			&(xwl_window->frame_window->drawable),
 			gc,
@@ -480,6 +471,7 @@ xwl_window_draw_decoration(struct xwl_window *xwl_window) {
 }
 
 
+/*** NOT IN USE CURRENTLY ***/
 static void
 xwl_clip_notify(WindowPtr pWin, int dx, int dy) {
 	ScreenPtr screen = pWin->drawable.pScreen;
@@ -514,14 +506,12 @@ xwl_clip_notify(WindowPtr pWin, int dx, int dy) {
     if(xwl_window == NULL)
     	return;
 
-    if(pWin == xwl_window->frame_window) {
-    	pixman_region_copy(&xwl_window->frame_clip, &pWin->clipList);
-    }
 
     //xwl_window_draw_decoration(xwl_window);
 
 }
 
+/*** NOT IN USE CURRENTLY ***/
 static void
 xwl_clear_to_background(WindowPtr pWin, int x, int y, int w, int h, Bool generateExposures)
 {
@@ -560,7 +550,7 @@ xwl_realize_window(WindowPtr window)
     Bool ret;
 	XID values[4];
 	int err = 0;
-	int x, y;
+	uint32_t x, y;
 	xGetWindowAttributesReply attr;
 	int buttons = FRAME_BUTTON_CLOSE;
 
@@ -613,32 +603,37 @@ xwl_realize_window(WindowPtr window)
 	LogWrite(0, "create xwl_window for %d\n", window->drawable.id);
 	xwl_window = calloc(sizeof *xwl_window, 1);
 	xwl_window->xwl_screen = xwl_screen;
-	xwl_window->window = window;
+	xwl_window->client_window = window;
 	xwl_window->surface = NULL;
 	xwl_window->shell_surface = NULL;
-	pixman_region_init(&xwl_window->frame_clip);
-
-	window_manager_window_read_properties(xwl_window);
-
-	LogWrite(0, "external client %d\n", window->drawable.id);
-
-	if (xwl_window->decorate & MWM_DECOR_MAXIMIZE)
-		buttons |= FRAME_BUTTON_MAXIMIZE;
-
-	xwl_window->frame = frame_create(xwl_screen->theme,
-			window->drawable.width,
-			window->drawable.height, buttons, xwl_window->name);
-
-	frame_resize_inside(xwl_window->frame, window->drawable.width, window->drawable.height);
-	frame_interior(xwl_window->frame, &x, &y, (uint32_t*)NULL, (uint32_t*)NULL);
 
 	GetWindowAttributes(window, serverClient, &attr);
 
 	LogWrite(0, "Override = %d\n", attr.override);
 
+	/* do not try to manage InputOnly windows */
+	if(attr.class == InputOnly) {
+		return ret;
+	}
+
 	if(!attr.override) {
+
+		window_manager_window_read_properties(xwl_window);
+
+		LogWrite(0, "external client %d\n", window->drawable.id);
+
+		if (xwl_window->decorate & MWM_DECOR_MAXIMIZE)
+			buttons |= FRAME_BUTTON_MAXIMIZE;
+
+		xwl_window->frame = frame_create(xwl_screen->theme,
+				window->drawable.width,
+				window->drawable.height, buttons, xwl_window->name);
+
+		frame_resize_inside(xwl_window->frame, window->drawable.width, window->drawable.height);
+		frame_interior(xwl_window->frame, &x, &y, (uint32_t*)NULL, (uint32_t*)NULL);
+
 		values[0] = 0;
-		ChangeWindowAttributes(xwl_window->window, CWBorderWidth, values, serverClient);
+		ChangeWindowAttributes(xwl_window->client_window, CWBorderWidth, values, serverClient);
 
 		values[0] = 0x00ff00ff;
 		values[1] = 0x00ff00ff;
@@ -675,38 +670,6 @@ xwl_realize_window(WindowPtr window)
 		/** Immediately redirect this window **/
 		compRedirectWindow(serverClient, xwl_window->frame_window, CompositeRedirectManual);
 
-    	if(xwl_window->frame_window->redirectDraw != RedirectDrawManual) {
-    		LogWrite(0, "NOT 1 RedirectDrawManual\n");
-    	} else {
-    		LogWrite(0, "XXX 1 RedirectDrawManual\n");
-    	}
-
-    	LogWrite(0, "sizeof(WindowRec) = %d\n", sizeof(WindowRec));
-
-        //window_manager_window_draw_decoration(xwl_window, (*screen->GetWindowPixmap)(xwl_window->frame_window));
-        //window_manager_window_draw_decoration(xwl_window, NULL);
-
-    	if(xwl_window->frame_window->redirectDraw != RedirectDrawManual) {
-    		LogWrite(0, "NOT 2 RedirectDrawManual\n");
-    	} else {
-    		LogWrite(0, "XXX 2 RedirectDrawManual\n");
-    	}
-
-		if (xwl_window->frame_window->redirectDraw != RedirectDrawManual) {
-			LogWrite(0, "unexpected redirect: ");
-			switch(window->redirectDraw) {
-			case RedirectDrawNone:
-				LogWrite(0, "RedirectDrawNone\n");
-				break;
-			case RedirectDrawAutomatic:
-				LogWrite(0, "RedirectDrawAutomatic\n");
-				break;
-			case RedirectDrawManual:
-				LogWrite(0, "RedirectDrawManual\n");
-				break;
-			}
-		}
-
 		window_manager_window_set_wm_state(xwl_window, ICCCM_NORMAL_STATE);
 		window_manager_window_set_net_wm_state(xwl_window);
 		window_manager_window_set_virtual_desktop(xwl_window, 0);
@@ -731,6 +694,53 @@ xwl_realize_window(WindowPtr window)
 					damage_destroy, DamageReportNonEmpty,
 					FALSE, screen, xwl_window);
 		DamageRegister(&xwl_window->frame_window->drawable, xwl_window->damage);
+		DamageSetReportAfterOp(xwl_window->damage, TRUE);
+
+		xorg_list_init(&xwl_window->link_damage);
+
+	} else {
+
+		window_manager_window_read_properties(xwl_window);
+		LogWrite(0, "Transient for %p\n", xwl_window->transient_for);
+
+		MapWindow(window, serverClient);
+
+		xwl_window->frame = NULL;
+		xwl_window->frame_window = NULL;
+
+		hash_table_insert(xwl_screen->window_hash, window->drawable.id, xwl_window);
+
+		MapWindow(xwl_window->client_window, serverClient);
+
+		LogWrite(0, "internal window %d\n", window->drawable.id);
+
+		/** Immediately redirect this window **/
+		compRedirectWindow(serverClient, xwl_window->client_window, CompositeRedirectManual);
+
+		window_manager_window_set_wm_state(xwl_window, ICCCM_NORMAL_STATE);
+		window_manager_window_set_net_wm_state(xwl_window);
+		window_manager_window_set_virtual_desktop(xwl_window, 0);
+
+		xwl_window->surface = wl_compositor_create_surface(xwl_screen->compositor);
+		wl_surface_add_listener(xwl_window->surface, &surface_listener, xwl_window);
+		xwl_window->shell_surface = wl_shell_get_shell_surface(xwl_screen->shell, xwl_window->surface);
+		wl_shell_surface_add_listener(xwl_window->shell_surface, &shell_surface_listener, xwl_window);
+
+		wl_shell_surface_set_toplevel(xwl_window->shell_surface);
+
+		if(xwl_window->name)
+			wl_shell_surface_set_title(xwl_window->shell_surface, xwl_window->name);
+
+		wl_display_flush(xwl_screen->display);
+		wl_surface_set_user_data(xwl_window->surface, xwl_window);
+
+		dixSetPrivate(&window->devPrivates, &xwl_window_private_key, xwl_window);
+
+		xwl_window->damage =
+			DamageCreate(damage_report,
+					damage_destroy, DamageReportNonEmpty,
+					FALSE, screen, xwl_window);
+		DamageRegister(&xwl_window->client_window->drawable, xwl_window->damage);
 		DamageSetReportAfterOp(xwl_window->damage, TRUE);
 
 		xorg_list_init(&xwl_window->link_damage);
@@ -764,7 +774,7 @@ xwl_unrealize_window(WindowPtr window)
     	return ret;
 
     xorg_list_for_each_entry(xwl_seat, &xwl_screen->seat_list, link) {
-        if (xwl_seat->focus_window && xwl_seat->focus_window->window == window)
+        if (xwl_seat->focus_window && xwl_seat->focus_window->client_window == window)
             xwl_seat->focus_window = NULL;
 
         xwl_seat_clear_touch(xwl_seat, window);
@@ -776,8 +786,13 @@ xwl_unrealize_window(WindowPtr window)
         return ret;
     }
 
-    hash_table_remove(xwl_screen->window_hash, xwl_window->window->drawable.id);
-    hash_table_remove(xwl_screen->window_hash, xwl_window->frame_window->drawable.id);
+    hash_table_remove(xwl_screen->window_hash, xwl_window->client_window->drawable.id);
+
+    if(xwl_window->frame_window)
+    	hash_table_remove(xwl_screen->window_hash, xwl_window->frame_window->drawable.id);
+
+    if(xwl_window->frame)
+    	frame_destroy(xwl_window->frame);
 
     if(xwl_window->shell_surface)
     	wl_shell_surface_destroy(xwl_window->shell_surface);
@@ -833,7 +848,7 @@ xwl_screen_post_damage(struct xwl_screen *xwl_screen)
             continue;
 
         region = DamageRegion(xwl_window->damage);
-        pixmap = (*xwl_screen->screen->GetWindowPixmap) (xwl_window->window);
+        pixmap = (*xwl_screen->screen->GetWindowPixmap) (xwl_window->client_window);
 
         //xwl_window_draw_decoration(xwl_window);
 

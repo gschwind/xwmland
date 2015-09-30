@@ -326,14 +326,14 @@ pointer_handle_button(void *data, struct wl_pointer *pointer, uint32_t serial,
     QueuePointerEvents(xwl_seat->pointer,
                        state ? ButtonPress : ButtonRelease, index, 0, &mask);
 
-    if(state) {
+    if(1) {
     	struct xwl_window * window = xwl_seat->focus_window;
 		enum theme_location location;
 		enum theme_location location_2;
 		int event_x = xwl_seat->last_pointer_x;
 		int event_y = xwl_seat->last_pointer_y;
 
-		LogWrite(0, "ButtonPress (%d,%d)\n", event_x, event_y);
+		LogWrite(0, "ButtonPress (%d,%d,%d)\n", event_x, event_y, state);
 
 		/* Make sure we're looking at the right location.  The frame
 		 * could have received a motion event from a pointer from a
@@ -342,10 +342,11 @@ pointer_handle_button(void *data, struct wl_pointer *pointer, uint32_t serial,
 		 * location before deciding what to do. */
 		location = frame_pointer_motion(window->frame, NULL,
 						event_x, event_y);
-		if(location == THEME_LOCATION_INTERIOR)
-			return;
 		location_2 = frame_pointer_button(window->frame, NULL,
 						button, state);
+		if(location == THEME_LOCATION_INTERIOR)
+			return;
+
 		//if (frame_status(window->frame) & FRAME_STATUS_REPAINT)
 		//	weston_wm_window_schedule_repaint(window);
 
@@ -361,10 +362,10 @@ pointer_handle_button(void *data, struct wl_pointer *pointer, uint32_t serial,
 			frame_status_clear(window->frame, FRAME_STATUS_RESIZE);
 		}
 
-//		if (frame_status(window->frame) & FRAME_STATUS_CLOSE) {
-//			weston_wm_window_close(window, time);
-//			frame_status_clear(window->frame, FRAME_STATUS_CLOSE);
-//		}
+		if (frame_status(window->frame) & FRAME_STATUS_CLOSE) {
+			send_wm_delete_window(window);
+			frame_status_clear(window->frame, FRAME_STATUS_CLOSE);
+		}
 //
 //		if (frame_status(window->frame) & FRAME_STATUS_MAXIMIZE) {
 //			window->maximized_horz = !window->maximized_horz;
@@ -628,8 +629,8 @@ xwl_touch_send_event(struct xwl_touch *xwl_touch,
     int32_t dx, dy;
     ValuatorMask mask;
 
-    dx = xwl_touch->window->window->drawable.x;
-    dy = xwl_touch->window->window->drawable.y;
+    dx = xwl_touch->window->client_window->drawable.x;
+    dy = xwl_touch->window->client_window->drawable.y;
 
     valuator_mask_zero(&mask);
     valuator_mask_set(&mask, 0, dx + xwl_touch->x);
@@ -922,7 +923,7 @@ xwl_seat_clear_touch(struct xwl_seat *xwl_seat, WindowPtr window)
 
     xorg_list_for_each_entry_safe(xwl_touch, next_xwl_touch,
                                   &xwl_seat->touches, link_touch) {
-        if (xwl_touch->window->window == window) {
+        if (xwl_touch->window->client_window == window) {
             xorg_list_del(&xwl_touch->link_touch);
             free(xwl_touch);
         }

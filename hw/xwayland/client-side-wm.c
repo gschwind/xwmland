@@ -149,6 +149,9 @@ int window_manager_client_fd(struct window_manager * wm) {
 //
 //}
 
+int window_manager_identity_window(struct window_manager * wm) {
+	return wm->identity_window;
+}
 
 static void
 window_manager_handle_map_notify(struct window_manager *wm, xcb_generic_event_t *event)

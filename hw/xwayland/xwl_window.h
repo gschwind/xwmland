@@ -43,11 +43,9 @@ struct xwl_window {
     struct wl_surface *surface;
     struct wl_shell_surface *shell_surface;
     struct frame * frame;
-
     WindowPtr frame_window;
-    RegionRec frame_clip;
 
-    WindowPtr window;
+    WindowPtr client_window;
     DamagePtr damage;
     struct xorg_list link_damage;
     struct xorg_list link_window;
