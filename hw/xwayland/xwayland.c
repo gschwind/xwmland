@@ -570,6 +570,10 @@ xwl_realize_window(WindowPtr window)
 	}
 
 	if(!attr.override) {
+		DeviceIntPtr dev;
+		XID colormap;
+		XID visual;
+		Bool visual_is_32b;
 
 		xwl_window->properties_dirty = 1;
 		window_manager_window_read_properties(xwl_window);
@@ -589,10 +593,19 @@ xwl_realize_window(WindowPtr window)
 		values[0] = 0;
 		ChangeWindowAttributes(xwl_window->client_window, CWBorderWidth, values, serverClient);
 
-		values[0] = 0x00ff00ff;
-		values[1] = 0x00ff00ff;
+		visual_is_32b = visual_is_depth_32(xwl_screen, attr.visualID);
+		if(visual_is_32b) {
+			visual = attr.visualID;
+			colormap = attr.colormap;
+		} else {
+			visual = xwl_screen->visual->vid;
+			colormap = xwl_screen->colormap_id;
+		}
+
+		values[0] = 0xff0000ff;
+		values[1] = 0x00ffffff;
 		values[2] = 0;
-		values[3] = xwl_screen->colormap_id;
+		values[3] = colormap;
 
 		LogWrite(0, "Class : %d, XID: %d\n",
 				(int)xwl_screen->colormap->class,
@@ -604,7 +617,7 @@ xwl_realize_window(WindowPtr window)
 				frame_height(xwl_window->frame),
 				0, InputOutput,
 				CWBackPixel|CWBorderPixel|CWBorderWidth|CWColormap, values,
-				32, serverClient, xwl_screen->visual->vid, &err);
+				32, serverClient, visual, &err);
 
 		/* once a resource is created it should be added */
 		AddResource(xwl_window->frame_window->drawable.id, RT_WINDOW, (void*)xwl_window->frame_window);
@@ -619,6 +632,9 @@ xwl_realize_window(WindowPtr window)
 
 		MapWindow(xwl_window->frame_window, serverClient);
 
+		dev = PickKeyboard(serverClient);
+		SetInputFocus(serverClient, dev, xwl_window->client_window->drawable.id, RevertToNone, 0, 0);
+
 		LogWrite(0, "internal window %d\n", window->drawable.id);
 
 		/** Immediately redirect this window **/
@@ -630,6 +646,15 @@ xwl_realize_window(WindowPtr window)
 
 		xwl_window->surface = wl_compositor_create_surface(xwl_screen->compositor);
 		wl_surface_add_listener(xwl_window->surface, &surface_listener, xwl_window);
+
+		if(!visual_is_32b) {
+			region = wl_compositor_create_region(xwl_screen->compositor);
+			wl_region_add(region, x, y,
+					xwl_window->client_window->drawable.width, xwl_window->client_window->drawable.height);
+			wl_surface_set_opaque_region(xwl_window->surface, region);
+			wl_region_destroy(region);
+		}
+
 		xwl_window->shell_surface = wl_shell_get_shell_surface(xwl_screen->shell, xwl_window->surface);
 		wl_shell_surface_add_listener(xwl_window->shell_surface, &shell_surface_listener, xwl_window);
 
@@ -710,7 +735,11 @@ xwl_realize_window(WindowPtr window)
 						xwl_window->client_window->origin.y - parent_y,
 						0);
 		    } else {
-		    	wl_shell_surface_set_toplevel(xwl_window->shell_surface);
+		    	wl_shell_surface_set_transient(xwl_window->shell_surface,
+		    			xwl_window->transient_for->surface,
+		    			xwl_window->client_window->origin.x - parent_x,
+		    			xwl_window->client_window->origin.y - parent_y,
+		    			0);
 		    }
 		} else {
 			wl_shell_surface_set_toplevel(xwl_window->shell_surface);

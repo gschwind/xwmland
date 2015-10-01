@@ -203,6 +203,24 @@ void window_manager_get_resources(struct xwl_screen *wm)
 
 }
 
+Bool visual_is_depth_32(struct xwl_screen *wm, unsigned long visual) {
+	int i, j;
+
+	for(i = 0; i < wm->screen->numDepths; ++i) {
+		if(wm->screen->allowedDepths[i].depth == 32) {
+			DepthPtr depth = &(wm->screen->allowedDepths[i]);
+			for(j = 0; j < depth->numVids; ++j) {
+				if(visual == depth->vids[j]) {
+					return True;
+				}
+			}
+		}
+	}
+
+	return False;
+
+}
+
 void window_manager_get_visual_and_colormap(struct xwl_screen *wm)
 {
 	int i;

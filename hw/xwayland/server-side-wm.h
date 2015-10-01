@@ -51,5 +51,6 @@ void window_manager_window_read_properties(struct xwl_window *window);
 void send_wm_delete_window(struct xwl_window * xwl_window);
 void xwl_window_draw_decoration(struct xwl_window *xwl_window);
 int get_cursor_for_location(enum theme_location location);
+Bool visual_is_depth_32(struct xwl_screen *wm, unsigned long visual);
 
 #endif /* HW_XWAYLAND_SERVER_SIDE_WM_H_ */
