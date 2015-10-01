@@ -555,8 +555,8 @@ frame_interior(struct frame *frame, uint32_t *x, uint32_t *y,
 }
 
 void
-frame_input_rect(struct frame *frame, int32_t *x, int32_t *y,
-		 int32_t *width, int32_t *height)
+frame_input_rect(struct frame *frame, uint32_t *x, uint32_t *y,
+		 uint32_t *width, uint32_t *height)
 {
 	frame_refresh_geometry(frame);
 

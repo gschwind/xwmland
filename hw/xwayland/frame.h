@@ -71,9 +71,8 @@ void frame_interior(struct frame *frame, uint32_t *x, uint32_t *y, uint32_t *wid
 
 enum theme_location frame_pointer_motion(struct frame *frame, void *data, int x, int y);
 uint32_t frame_status(struct frame *frame);
-enum theme_location
-frame_pointer_button(struct frame *frame, void *data,
-		     uint32_t btn, enum frame_button_state state);
+enum theme_location frame_pointer_button(struct frame *frame, void *data, uint32_t btn, enum frame_button_state state);
+void frame_input_rect(struct frame *frame, uint32_t *x, uint32_t *y, uint32_t *width, uint32_t *height);
 
 void
 frame_status_clear(struct frame *frame, enum frame_status status);

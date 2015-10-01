@@ -106,26 +106,6 @@ frame_set_flag(struct frame *frame, enum frame_flag flag);
 void
 frame_unset_flag(struct frame *frame, enum frame_flag flag);
 
-/* May set FRAME_STATUS_REPAINT */
-void
-frame_resize(struct frame *frame, int32_t width, int32_t height);
-
-/* May set FRAME_STATUS_REPAINT */
-void
-frame_resize_inside(struct frame *frame, int32_t width, int32_t height);
-
-int32_t
-frame_width(struct frame *frame);
-
-int32_t
-frame_height(struct frame *frame);
-
-void
-frame_interior(struct frame *frame, uint32_t *x, uint32_t *y,
-	       uint32_t *width, uint32_t *height);
-void
-frame_input_rect(struct frame *frame, int32_t *x, int32_t *y,
-		 int32_t *width, int32_t *height);
 void
 frame_opaque_rect(struct frame *frame, int32_t *x, int32_t *y,
 		  int32_t *width, int32_t *height);
@@ -133,19 +113,9 @@ frame_opaque_rect(struct frame *frame, int32_t *x, int32_t *y,
 int
 frame_get_shadow_margin(struct frame *frame);
 
-uint32_t
-frame_status(struct frame *frame);
-
-void
-frame_status_clear(struct frame *frame, enum frame_status status);
-
 /* May set FRAME_STATUS_REPAINT */
 enum theme_location
 frame_pointer_enter(struct frame *frame, void *pointer, int x, int y);
-
-/* May set FRAME_STATUS_REPAINT */
-enum theme_location
-frame_pointer_motion(struct frame *frame, void *pointer, int x, int y);
 
 /* May set FRAME_STATUS_REPAINT */
 void

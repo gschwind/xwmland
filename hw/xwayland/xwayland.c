@@ -503,7 +503,7 @@ xwl_realize_window(WindowPtr window)
     Bool ret;
 	XID values[4];
 	int err = 0;
-	uint32_t x, y;
+	uint32_t x, y, w, h;
 	xGetWindowAttributesReply attr;
 	int buttons = FRAME_BUTTON_CLOSE;
 
@@ -654,6 +654,12 @@ xwl_realize_window(WindowPtr window)
 			wl_surface_set_opaque_region(xwl_window->surface, region);
 			wl_region_destroy(region);
 		}
+
+		frame_input_rect(xwl_window->frame, &x, &y, &w, &h);
+		region = wl_compositor_create_region(xwl_screen->compositor);
+		wl_region_add(region, x, y, w, h);
+		wl_surface_set_input_region(xwl_window->surface, region);
+		wl_region_destroy(region);
 
 		xwl_window->shell_surface = wl_shell_get_shell_surface(xwl_screen->shell, xwl_window->surface);
 		wl_shell_surface_add_listener(xwl_window->shell_surface, &shell_surface_listener, xwl_window);
