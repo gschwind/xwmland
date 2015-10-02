@@ -77,6 +77,11 @@ void xwl_window_activate(struct xwl_window *xwl_window)
 
 }
 
+Bool xwl_window_is_maximized(struct xwl_window *window)
+{
+	return window->maximized_horz && window->maximized_vert;
+}
+
 
 void xwl_window_update_layout(struct xwl_window * xwl_window) {
     struct wl_region *region;

@@ -394,19 +394,21 @@ pointer_handle_button(void *data, struct wl_pointer *pointer, uint32_t serial,
 			send_wm_delete_window(window);
 			frame_status_clear(window->frame, FRAME_STATUS_CLOSE);
 		}
-//
-//		if (frame_status(window->frame) & FRAME_STATUS_MAXIMIZE) {
-//			window->maximized_horz = !window->maximized_horz;
-//			window->maximized_vert = !window->maximized_vert;
-//			if (weston_wm_window_is_maximized(window)) {
-//				window->saved_width = window->width;
-//				window->saved_height = window->height;
-//				wl_shell_surface_set_maximized(window->shell_surface);
-//			} else {
-//				wl_shell_surface_set_toplevel(window->shell_surface);
-//			}
-//			frame_status_clear(window->frame, FRAME_STATUS_MAXIMIZE);
-//		}
+
+		if (frame_status(window->frame) & FRAME_STATUS_MAXIMIZE) {
+			window->maximized_horz = !window->maximized_horz;
+			window->maximized_vert = !window->maximized_vert;
+			if (xwl_window_is_maximized(window)) {
+				struct xwl_output *first_output = xorg_list_first_entry(&(window->xwl_screen->output_list), struct xwl_output, link);
+				window->saved_width = window->width;
+				window->saved_height = window->height;
+				wl_shell_surface_set_maximized(window->shell_surface,
+						first_output->output);
+			} else {
+				wl_shell_surface_set_toplevel(window->shell_surface);
+			}
+			frame_status_clear(window->frame, FRAME_STATUS_MAXIMIZE);
+		}
     }
 
 }

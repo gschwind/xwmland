@@ -55,6 +55,6 @@ Bool visual_is_depth_32(struct xwl_screen *wm, unsigned long visual);
 void xwl_window_update_layout(struct xwl_window * xwl_window);
 void xwl_window_activate(struct xwl_window *xwl_window);
 void xwl_window_send_focus_window(struct xwl_window *xwl_window);
-
+Bool xwl_window_is_maximized(struct xwl_window *window);
 
 #endif /* HW_XWAYLAND_SERVER_SIDE_WM_H_ */
