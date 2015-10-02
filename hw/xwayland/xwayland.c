@@ -584,13 +584,6 @@ xwl_realize_window(WindowPtr window)
     	return ret;
     }
 
-    if(xwl_screen->realizing) {
-    	LogWrite(0, "END xwl_realize_window %d (Realizing)\n", window->drawable.id);
-    	return ret;
-    }
-
-    xwl_screen->realizing = TRUE;
-
 	GetWindowAttributes(window, serverClient, &attr);
 
 	LogWrite(0, "Override = %d\n", attr.override);
@@ -609,6 +602,7 @@ xwl_realize_window(WindowPtr window)
 	xwl_window->surface = NULL;
 	xwl_window->shell_surface = NULL;
 	xwl_window->override_redirect = attr.override;
+	xwl_window->starting = 1;
 
 	xorg_list_init(&(xwl_window->list_childdren));
 	xorg_list_init(&(xwl_window->link_sibling));
@@ -668,12 +662,11 @@ xwl_realize_window(WindowPtr window)
 
 		LogWrite(0, "Frame = %p, err = %d\n", xwl_window->frame_window, err);
 
-		ReparentWindow(window, xwl_window->frame_window, x, y, serverClient);
-		MapWindow(window, serverClient);
-
 		hash_table_insert(xwl_screen->window_hash, window->drawable.id, xwl_window);
 		hash_table_insert(xwl_screen->window_hash, xwl_window->frame_window->drawable.id, xwl_window);
 
+		ReparentWindow(window, xwl_window->frame_window, x, y, serverClient);
+		MapWindow(window, serverClient);
 		MapWindow(xwl_window->frame_window, serverClient);
 
 		dev = PickKeyboard(serverClient);
@@ -863,7 +856,7 @@ xwl_realize_window(WindowPtr window)
 
 	}
 
-    xwl_screen->realizing = FALSE;
+	xwl_window->starting = 0;
 	LogWrite(0, "END xwl_realize_window %d\n", window->drawable.id);
     return ret;
 }
@@ -886,9 +879,6 @@ xwl_unrealize_window(WindowPtr window)
     xwl_screen->UnrealizeWindow = screen->UnrealizeWindow;
     screen->UnrealizeWindow = xwl_unrealize_window;
 
-    if(xwl_screen->realizing)
-    	return ret;
-
     xorg_list_for_each_entry(xwl_seat, &xwl_screen->seat_list, link) {
         if (xwl_seat->focus_window && xwl_seat->focus_window->client_window == window)
             xwl_seat->focus_window = NULL;
@@ -901,6 +891,9 @@ xwl_unrealize_window(WindowPtr window)
     if (!xwl_window) {
         return ret;
     }
+
+    if(xwl_window->starting)
+    	return ret;
 
     hash_table_remove(xwl_screen->window_hash, xwl_window->client_window->drawable.id);
     if(xwl_window->frame_window)
@@ -1310,7 +1303,6 @@ xwl_screen_init(ScreenPtr pScreen, int argc, char **argv)
     xwl_screen->CloseScreen = pScreen->CloseScreen;
     pScreen->CloseScreen = xwl_close_screen;
 
-    xwl_screen->realizing = FALSE;
     xwl_screen->net_active_window = NULL;
 
     return ret;

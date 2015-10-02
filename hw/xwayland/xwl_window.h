@@ -54,6 +54,8 @@ struct xwl_window {
     struct xorg_list link_window;
     struct wl_callback *frame_callback;
 
+    int starting;
+
     int has_32b_visual;
     int layout_is_dirty;
 	int properties_dirty;
