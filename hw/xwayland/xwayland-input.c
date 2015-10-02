@@ -382,7 +382,7 @@ pointer_handle_button(void *data, struct wl_pointer *pointer, uint32_t serial,
 			if (pointer)
 				wl_shell_surface_move(window->shell_surface, xwl_seat->seat, serial);
 			frame_status_clear(window->frame, FRAME_STATUS_MOVE);
-			xwl_window_activate(window);
+			xwl_screen_window_activate(window->xwl_screen, window);
 		}
 
 		if (frame_status(window->frame) & FRAME_STATUS_RESIZE) {
@@ -986,6 +986,8 @@ InitInput(int argc, char *argv[])
 
     window_manager_get_resources(xwl_screen);
     window_manager_get_visual_and_colormap(xwl_screen);
+
+    xwl_screen_window_activate(xwl_screen, NULL);
 
     LogWrite(0, "InitInput\n");
 

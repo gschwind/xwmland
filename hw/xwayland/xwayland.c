@@ -675,7 +675,7 @@ xwl_realize_window(WindowPtr window)
 
 		xorg_list_init(&xwl_window->link_damage);
 
-		xwl_window_activate(xwl_window);
+		xwl_screen_window_activate(xwl_screen, xwl_window);
 
 	} else {
 
@@ -1271,6 +1271,7 @@ xwl_screen_init(ScreenPtr pScreen, int argc, char **argv)
     pScreen->CloseScreen = xwl_close_screen;
 
     xwl_screen->realizing = FALSE;
+    xwl_screen->net_active_window = NULL;
 
     return ret;
 }

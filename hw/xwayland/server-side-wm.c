@@ -66,24 +66,64 @@ void xwl_window_send_focus_window(struct xwl_window *xwl_window)
 	}
 }
 
-void xwl_window_activate(struct xwl_window *xwl_window)
+void xwl_window_raise_with_childdren(struct xwl_window * xwl_window) {
+	struct xwl_window * iterator;
+	XID values = Above;
+
+	LogWrite(0, "restack 0x%x\n", xwl_window->client_window->drawable.id);
+
+	/* Raise the window on top */
+	if(xwl_window->frame_window) {
+		ConfigureWindow(xwl_window->frame_window, CWStackMode, &values, serverClient);
+	} else {
+		ConfigureWindow(xwl_window->client_window, CWStackMode, &values, serverClient);
+	}
+
+	xorg_list_for_each_entry(iterator, &(xwl_window->list_childdren), link_sibling) {
+		xwl_window_raise_with_childdren(iterator);
+	}
+
+}
+
+void xwl_screen_window_activate(struct xwl_screen *xwl_screen, struct xwl_window *xwl_window)
 {
-	/* do not activate not managed windows */
-	if(!xwl_window->frame)
-		return;
 
-	ChangeWindowProperty(xwl_window->xwl_screen->screen->root,
-			xwl_window->xwl_screen->atom.net_active_window,
-			XA_WINDOW,
-			32,
-			PropModeReplace,
-			1,
-			&xwl_window->client_window->drawable.id,
-			True);
+	if(xwl_screen->net_active_window != NULL) {
+		frame_unset_flag(xwl_window->frame, FRAME_FLAG_ACTIVE);
+	}
 
-	xwl_window_send_focus_window(xwl_window);
-	frame_set_flag(xwl_window->frame, FRAME_FLAG_ACTIVE);
-	xwl_window->layout_is_dirty = 1;
+	xwl_screen->net_active_window = xwl_window;
+
+	if(xwl_window && xwl_window->frame) {
+
+		xwl_window_raise_with_childdren(xwl_window);
+
+		xwl_window_send_focus_window(xwl_window);
+
+		ChangeWindowProperty(xwl_screen->screen->root,
+				xwl_screen->atom.net_active_window,
+				XA_WINDOW,
+				32,
+				PropModeReplace,
+				1,
+				&xwl_window->client_window->drawable.id,
+				True);
+
+		frame_set_flag(xwl_window->frame, FRAME_FLAG_ACTIVE);
+		xwl_window->layout_is_dirty = 1;
+	} else if (!xwl_window) {
+		XID value = None;
+
+		ChangeWindowProperty(xwl_screen->screen->root,
+				xwl_screen->atom.net_active_window,
+				XA_WINDOW,
+				32,
+				PropModeReplace,
+				1,
+				&value,
+				True);
+
+	}
 
 }
 

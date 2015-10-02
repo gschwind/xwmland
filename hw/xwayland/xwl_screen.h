@@ -85,6 +85,8 @@ struct xwl_screen {
     struct theme * theme;
     struct window_manager * wm;
 
+    struct xwl_window * net_active_window;
+
 	VisualPtr visual;
 	Colormap colormap_id;
 	ColormapPtr colormap;
