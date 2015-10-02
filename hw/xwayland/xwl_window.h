@@ -45,7 +45,7 @@ struct xwl_window {
     struct frame * frame;
     WindowPtr frame_window;
 
-    struct xorg_list link_childdren;
+    struct xorg_list list_childdren;
     struct xorg_list link_sibling;
 
     WindowPtr client_window;

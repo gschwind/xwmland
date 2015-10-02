@@ -563,6 +563,9 @@ xwl_realize_window(WindowPtr window)
 	xwl_window->surface = NULL;
 	xwl_window->shell_surface = NULL;
 
+	xorg_list_init(&(xwl_window->list_childdren));
+	xorg_list_init(&(xwl_window->link_sibling));
+
 	GetWindowAttributes(window, serverClient, &attr);
 
 	LogWrite(0, "Override = %d\n", attr.override);
@@ -706,6 +709,10 @@ xwl_realize_window(WindowPtr window)
 			struct xwl_seat * xwl_seat_found = NULL;;
 			struct xwl_seat * xwl_seat;
 			int parent_x, parent_y;
+
+
+			xorg_list_add(&(xwl_window->link_sibling), &(xwl_window->transient_for->list_childdren));
+
 		    xorg_list_for_each_entry(xwl_seat, &xwl_screen->seat_list, link) {
 		    	if(xwl_seat->focus_window == xwl_window->transient_for) {
 		    		xwl_seat_found = xwl_seat;
@@ -737,7 +744,39 @@ xwl_realize_window(WindowPtr window)
 		    			0);
 		    }
 		} else {
-			wl_shell_surface_set_toplevel(xwl_window->shell_surface);
+			int parent_x, parent_y;
+			/**
+			 * if transient_for is not set, we guess this window is a child of
+			 * the window under the cursor, if this last window belong to the same
+			 * X11 client.
+			 */
+			struct xwl_seat *seat = xorg_list_first_entry(&(xwl_screen->seat_list), struct xwl_seat, link);
+
+			if(seat->focus_window != NULL) {
+			if(CLIENT_ID(seat->focus_window->client_window->drawable.id)
+					== CLIENT_ID(xwl_window->client_window->drawable.id)) {
+
+			    if(seat->focus_window->frame_window) {
+			    	parent_x = seat->focus_window->frame_window->origin.x;
+			    	parent_y = seat->focus_window->frame_window->origin.y;
+			    } else {
+			    	parent_x = seat->focus_window->client_window->origin.x;
+			    	parent_y = seat->focus_window->client_window->origin.y;
+			    }
+
+				wl_shell_surface_set_transient(xwl_window->shell_surface,
+						seat->focus_window->surface,
+		    			xwl_window->client_window->origin.x - parent_x,
+		    			xwl_window->client_window->origin.y - parent_y,
+		    			0);
+
+			} else {
+				wl_shell_surface_set_toplevel(xwl_window->shell_surface);
+			}
+
+			} else {
+				wl_shell_surface_set_toplevel(xwl_window->shell_surface);
+			}
 		}
 
 		if(xwl_window->name)
