@@ -987,6 +987,7 @@ InitInput(int argc, char *argv[])
     window_manager_get_resources(xwl_screen);
     window_manager_get_visual_and_colormap(xwl_screen);
 
+    xwl_screen_setup_net_supported(xwl_screen);
     xwl_screen_window_activate(xwl_screen, NULL);
 
     LogWrite(0, "InitInput\n");

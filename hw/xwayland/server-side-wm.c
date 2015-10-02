@@ -28,6 +28,29 @@
 #endif
 
 
+void xwl_screen_setup_net_supported(struct xwl_screen *xwl_screen) {
+	XID supported[8];
+
+	supported[0] = xwl_screen->atom.net_wm_moveresize;
+	supported[1] = xwl_screen->atom.net_wm_state;
+	supported[2] = xwl_screen->atom.net_wm_state_fullscreen;
+	supported[3] = xwl_screen->atom.net_wm_state_maximized_vert;
+	supported[4] = xwl_screen->atom.net_wm_state_maximized_horz;
+	supported[5] = xwl_screen->atom.net_active_window;
+	supported[6] = xwl_screen->atom.net_wm_window_type;
+	supported[7] = xwl_screen->atom.net_wm_window_type_normal;
+
+	ChangeWindowProperty(xwl_screen->screen->root,
+			xwl_screen->atom.net_supported,
+			XA_ATOM,
+			32,
+			PropModeReplace,
+			ARRAY_LENGTH(supported),
+			supported,
+			True);
+
+}
+
 void xwl_window_send_focus_window(struct xwl_window *xwl_window)
 {
 	DeviceIntPtr dev;
@@ -39,7 +62,7 @@ void xwl_window_send_focus_window(struct xwl_window *xwl_window)
 		if (xwl_window->override_redirect)
 			return;
 
-		LogWrite(0, "send_wm_delete_window for %d\n", xwl_window->client_window->drawable.id);
+		LogWrite(0, "xwl_window_send_focus_window for %d\n", xwl_window->client_window->drawable.id);
 
 		e.u.u.type = ClientMessage;
 		e.u.u.detail = 32;
@@ -92,23 +115,21 @@ void xwl_screen_window_activate(struct xwl_screen *xwl_screen, struct xwl_window
 		frame_unset_flag(xwl_window->frame, FRAME_FLAG_ACTIVE);
 	}
 
-	xwl_screen->net_active_window = xwl_window;
-
 	if(xwl_window && xwl_window->frame) {
 
-		xwl_window_raise_with_childdren(xwl_window);
+		if(xwl_screen->net_active_window != xwl_window) {
+			xwl_window_raise_with_childdren(xwl_window);
+			xwl_window_send_focus_window(xwl_window);
 
-		xwl_window_send_focus_window(xwl_window);
-
-		ChangeWindowProperty(xwl_screen->screen->root,
-				xwl_screen->atom.net_active_window,
-				XA_WINDOW,
-				32,
-				PropModeReplace,
-				1,
-				&xwl_window->client_window->drawable.id,
-				True);
-
+			ChangeWindowProperty(xwl_screen->screen->root,
+					xwl_screen->atom.net_active_window,
+					XA_WINDOW,
+					32,
+					PropModeReplace,
+					1,
+					&xwl_window->client_window->drawable.id,
+					True);
+		}
 		frame_set_flag(xwl_window->frame, FRAME_FLAG_ACTIVE);
 		xwl_window->layout_is_dirty = 1;
 	} else if (!xwl_window) {
@@ -125,6 +146,8 @@ void xwl_screen_window_activate(struct xwl_screen *xwl_screen, struct xwl_window
 
 	}
 
+	xwl_screen->net_active_window = xwl_window;
+
 }
 
 Bool xwl_window_is_maximized(struct xwl_window *window)
@@ -136,6 +159,7 @@ Bool xwl_window_is_maximized(struct xwl_window *window)
 void xwl_window_update_layout(struct xwl_window * xwl_window) {
     struct wl_region *region;
     uint32_t x, y, w, h;
+    XID values[6];
 
     if(!xwl_window->frame)
     	return;
@@ -145,11 +169,37 @@ void xwl_window_update_layout(struct xwl_window * xwl_window) {
 			xwl_window->client_window->drawable.height);
 
 	if(!xwl_window->has_32b_visual) {
+		DeviceIntPtr dev;
+		xEvent e;
+
 		frame_interior(xwl_window->frame, &x, &y, &w, &h);
 		region = wl_compositor_create_region(xwl_window->xwl_screen->compositor);
 		wl_region_add(region, x, y, w, h);
 		wl_surface_set_opaque_region(xwl_window->surface, region);
 		wl_region_destroy(region);
+
+		values[0] = x;
+		values[1] = y;
+		values[2] = w;
+		values[3] = h;
+		ConfigureWindow(xwl_window->client_window, CWX|CWY|CWWidth|CWHeight, values, serverClient);
+
+		e.u.u.type = ConfigureNotify|0x80;
+		e.u.u.detail = 32;
+		e.u.configureNotify.window = xwl_window->client_window->drawable.id;
+		e.u.configureNotify.aboveSibling = None;
+		e.u.configureNotify.borderWidth = 0;
+		e.u.configureNotify.height = h;
+		e.u.configureNotify.width = w;
+		e.u.configureNotify.x = x;
+		e.u.configureNotify.y = y;
+		e.u.configureNotify.event = xwl_window->client_window->drawable.id;
+		e.u.configureNotify.override = FALSE;
+
+		dev = PickPointer(serverClient);
+		DeliverEventsToWindow(dev, xwl_window->client_window,
+							  &e, 1, StructureNotifyMask, NullGrab);
+
 	} else {
 		region = wl_compositor_create_region(xwl_window->xwl_screen->compositor);
 		wl_surface_set_opaque_region(xwl_window->surface, region);
@@ -162,7 +212,11 @@ void xwl_window_update_layout(struct xwl_window * xwl_window) {
 	wl_surface_set_input_region(xwl_window->surface, region);
 	wl_region_destroy(region);
 
+
+
 	xwl_window_draw_decoration(xwl_window);
+
+
 
 }
 

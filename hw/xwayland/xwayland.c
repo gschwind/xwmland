@@ -424,7 +424,48 @@ xwl_window_exposures(WindowPtr pWin, RegionPtr pRegion) {
 
 }
 
+static Bool
+xwl_screen_change_window_attributes(WindowPtr pWin, unsigned long vmask) {
+		ScreenPtr screen = pWin->drawable.pScreen;
+    struct xwl_screen *xwl_screen;
+    struct xwl_window *xwl_window;
+	pixman_box16_t * rects;
+	int nrects, i;
 
+    LogWrite(0, "xwl_screen_change_window_attributes %d\n", pWin->drawable.id);
+
+	xwl_screen = xwl_screen_get(screen);
+
+	/* call legacy ClipNotify */
+	if(xwl_screen->ChangeWindowAttributes) {
+		screen->ChangeWindowAttributes = xwl_screen->ChangeWindowAttributes;
+		(*screen->ChangeWindowAttributes) (pWin, vmask);
+		xwl_screen->ChangeWindowAttributes = screen->ChangeWindowAttributes;
+		screen->ChangeWindowAttributes = xwl_screen_change_window_attributes;
+	}
+
+    if(pWin == screen->root)
+    	return FALSE;
+
+    xwl_window = hash_table_lookup(xwl_screen->window_hash, pWin->drawable.id);
+    if(xwl_window == NULL)
+    	return FALSE;
+
+    if((vmask & (CWX|CWY|CWWidth|CWHeight)) && xwl_window->frame) {
+    	uint32_t x, y, w, h;
+    	frame_interior(xwl_window->frame, &x, &y, &w, &h);
+    	if(pWin->drawable.x != x
+    		|| pWin->drawable.y != y
+			|| pWin->drawable.width != w
+			|| pWin->drawable.height != h
+    	) {
+    		xwl_window->layout_is_dirty = 1;
+    	}
+
+    }
+
+	return FALSE;
+}
 
 
 /*** NOT IN USE CURRENTLY ***/
@@ -526,34 +567,39 @@ xwl_realize_window(WindowPtr window)
 		RegionNull(&window->winSize);
 	}
 
-    if(window == screen->root) {
-    	LogWrite(0, "END xwl_realize_window %d\n", window->drawable.id);
+    if(CLIENT_ID(window->drawable.id) == 0) {
+    	LogWrite(0, "END xwl_realize_window %d (Server Window)\n", window->drawable.id);
     	return ret;
     }
 
     if(window->parent != screen->root && window->parent != 0) {
-    	LogWrite(0, "END xwl_realize_window %d\n", window->drawable.id);
-    	return ret;
-    }
-
-    if(wClient(window) == 0) {
-    	LogWrite(0, "END xwl_realize_window %d\n", window->drawable.id);
+    	LogWrite(0, "END xwl_realize_window %d (Not child of root)\n", window->drawable.id);
     	return ret;
     }
 
     xwl_window = hash_table_lookup(xwl_screen->window_hash, window->drawable.id);
 
     if(xwl_window != NULL) {
-    	LogWrite(0, "END xwl_realize_window %d\n", window->drawable.id);
+    	LogWrite(0, "END xwl_realize_window %d (Window already managed)\n", window->drawable.id);
     	return ret;
     }
 
     if(xwl_screen->realizing) {
-    	LogWrite(0, "END xwl_realize_window %d\n", window->drawable.id);
+    	LogWrite(0, "END xwl_realize_window %d (Realizing)\n", window->drawable.id);
     	return ret;
     }
 
     xwl_screen->realizing = TRUE;
+
+	GetWindowAttributes(window, serverClient, &attr);
+
+	LogWrite(0, "Override = %d\n", attr.override);
+
+	/* do not try to manage InputOnly windows */
+	if(attr.class == InputOnly) {
+		LogWrite(0, "END xwl_realize_window %d (InputOnly)\n", window->drawable.id);
+		return ret;
+	}
 
 	/* register this window */
 	LogWrite(0, "create xwl_window for %d\n", window->drawable.id);
@@ -562,20 +608,11 @@ xwl_realize_window(WindowPtr window)
 	xwl_window->client_window = window;
 	xwl_window->surface = NULL;
 	xwl_window->shell_surface = NULL;
+	xwl_window->override_redirect = attr.override;
 
 	xorg_list_init(&(xwl_window->list_childdren));
 	xorg_list_init(&(xwl_window->link_sibling));
 
-	GetWindowAttributes(window, serverClient, &attr);
-
-	LogWrite(0, "Override = %d\n", attr.override);
-
-	/* do not try to manage InputOnly windows */
-	if(attr.class == InputOnly) {
-		return ret;
-	}
-
-	xwl_window->override_redirect = attr.override;
 	if(!attr.override) {
 		DeviceIntPtr dev;
 		XID colormap;
@@ -741,8 +778,8 @@ xwl_realize_window(WindowPtr window)
 
 
 		    xorg_list_for_each_entry(seat_iterator, &xwl_screen->seat_list, link) {
-		    	if(seat_iterator->focus_window == xwl_window->transient_for
-		    		| seat_iterator->focus_window == xwl_window->below) {
+		    	if((seat_iterator->focus_window == xwl_window->transient_for)
+		    		|| (seat_iterator->focus_window == xwl_window->below)) {
 		    		xwl_seat_found = seat_iterator;
 		    		break;
 		    	}
@@ -1266,6 +1303,9 @@ xwl_screen_init(ScreenPtr pScreen, int argc, char **argv)
     /* Check exposure to ensure frame drawing */
     xwl_screen->WindowExposures = pScreen->WindowExposures;
     pScreen->WindowExposures = xwl_window_exposures;
+
+    xwl_screen->ChangeWindowAttributes = pScreen->ChangeWindowAttributes;
+    pScreen->ChangeWindowAttributes = xwl_screen_change_window_attributes;
 
     xwl_screen->CloseScreen = pScreen->CloseScreen;
     pScreen->CloseScreen = xwl_close_screen;

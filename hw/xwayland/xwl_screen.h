@@ -42,6 +42,8 @@ struct xwl_screen {
     RealizeWindowProcPtr RealizeWindow;
     UnrealizeWindowProcPtr UnrealizeWindow;
 
+    ChangeWindowAttributesProcPtr ChangeWindowAttributes;
+
     ClipNotifyProcPtr ClipNotify;
     WindowExposuresProcPtr WindowExposures;
     ClearToBackgroundProcPtr ClearToBackground;

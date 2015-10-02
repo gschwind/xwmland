@@ -92,7 +92,7 @@
 struct window_manager;
 struct frame;
 
-struct window_manager * window_manager_create();
+struct window_manager * window_manager_create(void);
 
 void window_manager_block_handler(void *data, struct timeval **tv, void *read_mask);
 void window_manager_wakeup_handler(void *data, int err, void *read_mask);
@@ -107,9 +107,6 @@ pthread_mutex_t * window_manager_init_conn(struct window_manager * wm);
 pthread_t * window_manager_init_conn_thread(struct window_manager * wm);
 int window_manager_client_fd(struct window_manager * wm);
 int window_manager_identity_window(struct window_manager * wm);
-
-
-char * window_manager_window_draw_frame(struct frame * frame);
 void frame_destroy(struct frame *frame);
 
 #endif /* HW_XWAYLAND_CLIENT_SIDE_WM_H_ */
