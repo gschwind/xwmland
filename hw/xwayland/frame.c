@@ -401,7 +401,7 @@ frame_set_title(struct frame *frame, const char *title)
 void
 frame_set_flag(struct frame *frame, enum frame_flag flag)
 {
-	if (flag & FRAME_FLAG_MAXIMIZED && !(frame->flags & FRAME_FLAG_MAXIMIZED))
+	if ((flag & FRAME_FLAG_MAXIMIZED) && !(frame->flags & FRAME_FLAG_MAXIMIZED))
 		frame->geometry_dirty = 1;
 
 	frame->flags |= flag;
@@ -411,7 +411,7 @@ frame_set_flag(struct frame *frame, enum frame_flag flag)
 void
 frame_unset_flag(struct frame *frame, enum frame_flag flag)
 {
-	if (flag & FRAME_FLAG_MAXIMIZED && frame->flags & FRAME_FLAG_MAXIMIZED)
+	if ((flag & FRAME_FLAG_MAXIMIZED) && (frame->flags & FRAME_FLAG_MAXIMIZED))
 		frame->geometry_dirty = 1;
 
 	frame->flags &= ~flag;

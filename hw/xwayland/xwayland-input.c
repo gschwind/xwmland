@@ -382,6 +382,7 @@ pointer_handle_button(void *data, struct wl_pointer *pointer, uint32_t serial,
 			if (pointer)
 				wl_shell_surface_move(window->shell_surface, xwl_seat->seat, serial);
 			frame_status_clear(window->frame, FRAME_STATUS_MOVE);
+			xwl_window_activate(window);
 		}
 
 		if (frame_status(window->frame) & FRAME_STATUS_RESIZE) {

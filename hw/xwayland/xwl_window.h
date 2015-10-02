@@ -62,6 +62,7 @@ struct xwl_window {
 	char *class_;
 	char *name;
 	struct xwl_window *transient_for;
+	struct xwl_window *below;
 	uint32_t protocols;
 	Atom type;
 	int width, height;

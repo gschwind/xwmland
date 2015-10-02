@@ -675,6 +675,8 @@ xwl_realize_window(WindowPtr window)
 
 		xorg_list_init(&xwl_window->link_damage);
 
+		xwl_window_activate(xwl_window);
+
 	} else {
 
 		xwl_window->properties_dirty = 1;
@@ -706,16 +708,42 @@ xwl_realize_window(WindowPtr window)
 		wl_shell_surface_add_listener(xwl_window->shell_surface, &shell_surface_listener, xwl_window);
 
 		if(xwl_window->transient_for) {
-			struct xwl_seat * xwl_seat_found = NULL;;
-			struct xwl_seat * xwl_seat;
+			struct xwl_seat * xwl_seat_found;
+			struct xwl_seat * seat_iterator;
 			int parent_x, parent_y;
+			struct xwl_window *window_iterator;
+
+			xwl_seat_found = NULL;
 
 
+			/**
+			 * Find the staking order, if more than ones transient for is found
+			 * The current window goes on top of the last one. Else the window
+			 * will be above the transient for.
+			 **/
+			xwl_window->below = NULL;
+
+			xorg_list_for_each_entry(window_iterator, &(xwl_window->transient_for->list_childdren), link_sibling) {
+				/* if this is a not managed window, go above it */
+				if(!window_iterator->frame) {
+					xwl_window->below = window_iterator;
+					break;
+				}
+			}
+
+			/* if below still unset, go above transient_for */
+			if(!xwl_window->below) {
+				xwl_window->below = xwl_window->transient_for;
+			}
+
+			/** add current window to the sibling list */
 			xorg_list_add(&(xwl_window->link_sibling), &(xwl_window->transient_for->list_childdren));
 
-		    xorg_list_for_each_entry(xwl_seat, &xwl_screen->seat_list, link) {
-		    	if(xwl_seat->focus_window == xwl_window->transient_for) {
-		    		xwl_seat_found = xwl_seat;
+
+		    xorg_list_for_each_entry(seat_iterator, &xwl_screen->seat_list, link) {
+		    	if(seat_iterator->focus_window == xwl_window->transient_for
+		    		| seat_iterator->focus_window == xwl_window->below) {
+		    		xwl_seat_found = seat_iterator;
 		    		break;
 		    	}
 		    }
@@ -731,7 +759,7 @@ xwl_realize_window(WindowPtr window)
 		    if(xwl_seat_found) {
 		    	wl_shell_surface_set_popup(xwl_window->shell_surface,
 		    			xwl_seat_found->seat,
-						xwl_seat->pointer_enter_serial,
+						xwl_seat_found->pointer_enter_serial,
 						xwl_window->transient_for->surface,
 						xwl_window->client_window->origin.x - parent_x,
 						xwl_window->client_window->origin.y - parent_y,
@@ -848,6 +876,10 @@ xwl_unrealize_window(WindowPtr window)
     	wl_shell_surface_destroy(xwl_window->shell_surface);
 
     wl_surface_destroy(xwl_window->surface);
+
+    if(!xorg_list_is_empty(&xwl_window->link_sibling)) {
+    	xorg_list_del(&xwl_window->link_sibling);
+    }
 
     if (RegionNotEmpty(DamageRegion(xwl_window->damage)))
         xorg_list_del(&xwl_window->link_damage);

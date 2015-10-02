@@ -108,6 +108,7 @@ struct xwl_screen {
 		Atom		 net_wm_user_time;
 		Atom		 net_wm_icon_name;
 		Atom		 net_wm_desktop;
+		Atom		 net_active_window;
 		Atom		 net_wm_window_type;
 		Atom		 net_wm_window_type_desktop;
 		Atom		 net_wm_window_type_dock;

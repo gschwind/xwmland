@@ -76,5 +76,6 @@ void frame_input_rect(struct frame *frame, uint32_t *x, uint32_t *y, uint32_t *w
 
 void frame_status_clear(struct frame *frame, enum frame_status status);
 void frame_unset_flag(struct frame *frame, enum frame_flag flag);
+void frame_set_flag(struct frame *frame, enum frame_flag flag);
 
 #endif /* HW_XWAYLAND_FRAME_H_ */

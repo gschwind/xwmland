@@ -68,11 +68,21 @@ void xwl_window_send_focus_window(struct xwl_window *xwl_window)
 
 void xwl_window_activate(struct xwl_window *xwl_window)
 {
+	/* do not activate not managed windows */
+	if(!xwl_window->frame)
+		return;
+
+	ChangeWindowProperty(xwl_window->xwl_screen->screen->root,
+			xwl_window->xwl_screen->atom.net_active_window,
+			XA_WINDOW,
+			32,
+			PropModeReplace,
+			1,
+			&xwl_window->client_window->drawable.id,
+			True);
 
 	xwl_window_send_focus_window(xwl_window);
-	if (xwl_window->frame)
-		frame_unset_flag(xwl_window->frame, FRAME_FLAG_ACTIVE);
-
+	frame_set_flag(xwl_window->frame, FRAME_FLAG_ACTIVE);
 	xwl_window->layout_is_dirty = 1;
 
 }
@@ -238,6 +248,7 @@ void window_manager_get_resources(struct xwl_screen *wm)
 		{ "_NET_WM_USER_TIME", F(atom.net_wm_user_time) },
 		{ "_NET_WM_ICON_NAME", F(atom.net_wm_icon_name) },
 		{ "_NET_WM_DESKTOP", F(atom.net_wm_desktop) },
+		{ "_NET_ACTIVE_WINDOW", F(atom.net_active_window) },
 		{ "_NET_WM_WINDOW_TYPE", F(atom.net_wm_window_type) },
 
 		{ "_NET_WM_WINDOW_TYPE_DESKTOP", F(atom.net_wm_window_type_desktop) },
