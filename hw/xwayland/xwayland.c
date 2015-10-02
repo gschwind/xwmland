@@ -350,7 +350,8 @@ shell_surface_configure(void *data,
 	struct xwl_window * xwl_window = data;
 	XID values[4];
 
-	LogWrite(0, "%s(%d,%d,%d)\n", __PRETTY_FUNCTION__, edges, width, height);
+	//LogWrite(0, "%s(%d,%d,%d)\n", __PRETTY_FUNCTION__, edges, width, height);
+
 	frame_resize(xwl_window->frame, width, height);
 	values[0] = frame_width(xwl_window->frame);
 	values[1] = frame_height(xwl_window->frame);
@@ -419,7 +420,7 @@ xwl_window_exposures(WindowPtr pWin, RegionPtr pRegion) {
 //	}
 //	LogWrite(0, "\n");
 
-    xwl_window_draw_decoration(xwl_window);
+    xwl_window->layout_is_dirty = 1;
 
 }
 
@@ -849,6 +850,14 @@ xwl_screen_post_damage(struct xwl_screen *xwl_screen)
     struct wl_buffer *buffer;
     PixmapPtr pixmap;
 
+    xorg_list_for_each_entry_safe(xwl_window, next_xwl_window,
+                                  &xwl_screen->damage_window_list, link_damage) {
+        if(xwl_window->layout_is_dirty) {
+        	xwl_window->layout_is_dirty = 0;
+        	xwl_window_update_layout(xwl_window);
+        }
+    }
+
     //LogWrite(0, "process damages\n");
     xorg_list_for_each_entry_safe(xwl_window, next_xwl_window,
                                   &xwl_screen->damage_window_list, link_damage) {
@@ -860,11 +869,6 @@ xwl_screen_post_damage(struct xwl_screen *xwl_screen)
 
         region = DamageRegion(xwl_window->damage);
         pixmap = (*xwl_screen->screen->GetWindowPixmap) (xwl_window->client_window);
-
-        if(xwl_window->layout_is_dirty) {
-        	xwl_window->layout_is_dirty = 0;
-        	xwl_window_update_layout(xwl_window);
-        }
 
 #if GLAMOR_HAS_GBM
         if (xwl_screen->glamor)

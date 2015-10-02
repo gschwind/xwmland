@@ -72,7 +72,8 @@ void xwl_window_activate(struct xwl_window *xwl_window)
 	xwl_window_send_focus_window(xwl_window);
 	if (xwl_window->frame)
 		frame_unset_flag(xwl_window->frame, FRAME_FLAG_ACTIVE);
-	xwl_window_draw_decoration(xwl_window);
+
+	xwl_window->layout_is_dirty = 1;
 
 }
 
@@ -83,6 +84,10 @@ void xwl_window_update_layout(struct xwl_window * xwl_window) {
 
     if(!xwl_window->frame)
     	return;
+
+    frame_resize_inside(xwl_window->frame,
+    		xwl_window->client_window->drawable.width,
+			xwl_window->client_window->drawable.height);
 
 	if(!xwl_window->has_32b_visual) {
 		frame_interior(xwl_window->frame, &x, &y, &w, &h);
@@ -101,6 +106,8 @@ void xwl_window_update_layout(struct xwl_window * xwl_window) {
 	wl_region_add(region, x, y, w, h);
 	wl_surface_set_input_region(xwl_window->surface, region);
 	wl_region_destroy(region);
+
+	xwl_window_draw_decoration(xwl_window);
 
 }
 
