@@ -359,6 +359,8 @@ shell_surface_configure(void *data,
 	frame_interior(xwl_window->frame, &values[0], &values[1], &values[2], &values[3]);
 	ConfigureWindow(xwl_window->client_window, CWX|CWY|CWWidth|CWHeight, values, serverClient);
 
+	xwl_window->layout_is_dirty = 1;
+
 }
 
 static void
@@ -499,7 +501,7 @@ xwl_realize_window(WindowPtr window)
 	ScreenPtr screen = window->drawable.pScreen;
     struct xwl_screen *xwl_screen;
     struct xwl_window *xwl_window;
-    struct wl_region *region;
+
     Bool ret;
 	XID values[4];
 	int err = 0;
@@ -569,11 +571,11 @@ xwl_realize_window(WindowPtr window)
 		return ret;
 	}
 
+	xwl_window->override_redirect = attr.override;
 	if(!attr.override) {
 		DeviceIntPtr dev;
 		XID colormap;
 		XID visual;
-		Bool visual_is_32b;
 
 		xwl_window->properties_dirty = 1;
 		window_manager_window_read_properties(xwl_window);
@@ -593,8 +595,9 @@ xwl_realize_window(WindowPtr window)
 		values[0] = 0;
 		ChangeWindowAttributes(xwl_window->client_window, CWBorderWidth, values, serverClient);
 
-		visual_is_32b = visual_is_depth_32(xwl_screen, attr.visualID);
-		if(visual_is_32b) {
+		xwl_window->layout_is_dirty = 1;
+		xwl_window->has_32b_visual = visual_is_depth_32(xwl_screen, attr.visualID);
+		if(xwl_window->has_32b_visual) {
 			visual = attr.visualID;
 			colormap = attr.colormap;
 		} else {
@@ -602,8 +605,8 @@ xwl_realize_window(WindowPtr window)
 			colormap = xwl_screen->colormap_id;
 		}
 
-		values[0] = 0xff0000ff;
-		values[1] = 0x00ffffff;
+		values[0] = screen->blackPixel;
+		values[1] = screen->blackPixel;
 		values[2] = 0;
 		values[3] = colormap;
 
@@ -646,21 +649,6 @@ xwl_realize_window(WindowPtr window)
 
 		xwl_window->surface = wl_compositor_create_surface(xwl_screen->compositor);
 		wl_surface_add_listener(xwl_window->surface, &surface_listener, xwl_window);
-
-		if(!visual_is_32b) {
-			region = wl_compositor_create_region(xwl_screen->compositor);
-			wl_region_add(region, x, y,
-					xwl_window->client_window->drawable.width, xwl_window->client_window->drawable.height);
-			wl_surface_set_opaque_region(xwl_window->surface, region);
-			wl_region_destroy(region);
-		}
-
-		frame_input_rect(xwl_window->frame, &x, &y, &w, &h);
-		region = wl_compositor_create_region(xwl_screen->compositor);
-		wl_region_add(region, x, y, w, h);
-		wl_surface_set_input_region(xwl_window->surface, region);
-		wl_region_destroy(region);
-
 		xwl_window->shell_surface = wl_shell_get_shell_surface(xwl_screen->shell, xwl_window->surface);
 		wl_shell_surface_add_listener(xwl_window->shell_surface, &shell_surface_listener, xwl_window);
 
@@ -873,7 +861,10 @@ xwl_screen_post_damage(struct xwl_screen *xwl_screen)
         region = DamageRegion(xwl_window->damage);
         pixmap = (*xwl_screen->screen->GetWindowPixmap) (xwl_window->client_window);
 
-        //xwl_window_draw_decoration(xwl_window);
+        if(xwl_window->layout_is_dirty) {
+        	xwl_window->layout_is_dirty = 0;
+        	xwl_window_update_layout(xwl_window);
+        }
 
 #if GLAMOR_HAS_GBM
         if (xwl_screen->glamor)

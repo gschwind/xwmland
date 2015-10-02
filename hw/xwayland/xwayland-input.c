@@ -360,6 +360,9 @@ pointer_handle_button(void *data, struct wl_pointer *pointer, uint32_t serial,
 		if(!window->frame_window)
 			return;
 
+		if(state)
+			xwl_window_send_focus_window(window);
+
 		/* Make sure we're looking at the right location.  The frame
 		 * could have received a motion event from a pointer from a
 		 * different wl_seat, but under X it looks like our core

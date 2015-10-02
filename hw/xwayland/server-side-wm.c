@@ -14,6 +14,8 @@
 #include "xwl_screen.h"
 #include "xwl_window.h"
 
+#include <wayland-client-protocol.h>
+
 #include "windowstr.h"
 #include "gc.h"
 #include "gcstruct.h"
@@ -24,6 +26,83 @@
 #ifndef ARRAY_LENGTH
 #define ARRAY_LENGTH(a) (sizeof (a) / sizeof (a)[0])
 #endif
+
+
+void xwl_window_send_focus_window(struct xwl_window *xwl_window)
+{
+	DeviceIntPtr dev;
+	xEvent e;
+
+	if (xwl_window->client_window) {
+		uint32_t values[1];
+
+		if (xwl_window->override_redirect)
+			return;
+
+		LogWrite(0, "send_wm_delete_window for %d\n", xwl_window->client_window->drawable.id);
+
+		e.u.u.type = ClientMessage;
+		e.u.u.detail = 32;
+		e.u.clientMessage.window = xwl_window->client_window->drawable.id;
+		e.u.clientMessage.u.l.type = xwl_window->xwl_screen->atom.wm_protocols;
+		e.u.clientMessage.u.l.longs0 = xwl_window->xwl_screen->atom.wm_take_focus;
+		e.u.clientMessage.u.l.longs1 = GetTimeInMillis();
+		e.u.clientMessage.u.l.longs2 = 0;
+		e.u.clientMessage.u.l.longs3 = 0;
+		e.u.clientMessage.u.l.longs4 = 0;
+
+		dev = PickKeyboard(serverClient);
+		DeliverEventsToWindow(dev, xwl_window->client_window,
+							  &e, 1, SubstructureRedirectMask, NullGrab);
+
+		SetInputFocus(serverClient, dev, xwl_window->client_window->drawable.id,
+				RevertToNone, GetTimeInMillis(), 0);
+
+		values[0] = Above;
+		ConfigureWindow(xwl_window->client_window, CWStackMode, values, serverClient);
+	} else {
+		dev = PickKeyboard(serverClient);
+		SetInputFocus(serverClient, dev, None, RevertToNone, GetTimeInMillis(), 0);
+	}
+}
+
+void xwl_window_activate(struct xwl_window *xwl_window)
+{
+
+	xwl_window_send_focus_window(xwl_window);
+	if (xwl_window->frame)
+		frame_unset_flag(xwl_window->frame, FRAME_FLAG_ACTIVE);
+	xwl_window_draw_decoration(xwl_window);
+
+}
+
+
+void xwl_window_update_layout(struct xwl_window * xwl_window) {
+    struct wl_region *region;
+    uint32_t x, y, w, h;
+
+    if(!xwl_window->frame)
+    	return;
+
+	if(!xwl_window->has_32b_visual) {
+		frame_interior(xwl_window->frame, &x, &y, &w, &h);
+		region = wl_compositor_create_region(xwl_window->xwl_screen->compositor);
+		wl_region_add(region, x, y, w, h);
+		wl_surface_set_opaque_region(xwl_window->surface, region);
+		wl_region_destroy(region);
+	} else {
+		region = wl_compositor_create_region(xwl_window->xwl_screen->compositor);
+		wl_surface_set_opaque_region(xwl_window->surface, region);
+		wl_region_destroy(region);
+	}
+
+	frame_input_rect(xwl_window->frame, &x, &y, &w, &h);
+	region = wl_compositor_create_region(xwl_window->xwl_screen->compositor);
+	wl_region_add(region, x, y, w, h);
+	wl_surface_set_input_region(xwl_window->surface, region);
+	wl_region_destroy(region);
+
+}
 
 int
 get_cursor_for_location(enum theme_location location)
