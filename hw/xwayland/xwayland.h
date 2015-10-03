@@ -38,6 +38,7 @@
 #include <dix.h>
 #include <randrstr.h>
 #include <exevents.h>
+#include <hashtable.h>
 
 #include "xwl_screen.h"
 #include "xwl_window.h"
@@ -148,5 +149,10 @@ xwl_screen_lock_window(struct xwl_screen *xwl_screen, uint32_t id);
 
 void
 xwl_screen_unlock_window(struct xwl_window * xwl_window);
+
+struct xwl_window * xwl_screen_find_window(struct xwl_screen * xwl_screen, XID id);
+void xwl_screen_add_window(struct xwl_screen * xwl_screen, XID id, struct xwl_window * win);
+void xwl_screen_remove_window(struct xwl_screen * xwl_screen, XID id);
+
 
 #endif

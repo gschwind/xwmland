@@ -60,8 +60,6 @@ struct theme {
 	int titlebar_height;
 };
 
-struct theme *
-theme_create(void);
 void
 theme_destroy(struct theme *t);
 
@@ -86,25 +84,9 @@ theme_get_location(struct theme *t, int x, int y, int width, int height, int fla
 
 struct frame;
 
-
-struct frame *
-frame_create(struct theme *t, int32_t width, int32_t height, uint32_t buttons,
-	     const char *title);
-
-void
-frame_destroy(struct frame *frame);
-
 /* May set FRAME_STATUS_REPAINT */
 int
 frame_set_title(struct frame *frame, const char *title);
-
-/* May set FRAME_STATUS_REPAINT */
-void
-frame_set_flag(struct frame *frame, enum frame_flag flag);
-
-/* May set FRAME_STATUS_REPAINT */
-void
-frame_unset_flag(struct frame *frame, enum frame_flag flag);
 
 void
 frame_opaque_rect(struct frame *frame, int32_t *x, int32_t *y,
@@ -120,24 +102,6 @@ frame_pointer_enter(struct frame *frame, void *pointer, int x, int y);
 /* May set FRAME_STATUS_REPAINT */
 void
 frame_pointer_leave(struct frame *frame, void *pointer);
-
-/* Call to indicate that a button has been pressed/released.  The return
- * value for a button release will be the same as for the corresponding
- * press.  This allows you to more easily track grabs.  If you want the
- * actual location, simply keep the location from the last
- * frame_pointer_motion call.
- *
- * May set:
- *	FRAME_STATUS_MINIMIZE
- *	FRAME_STATUS_MAXIMIZE
- *	FRAME_STATUS_CLOSE
- *	FRAME_STATUS_MENU
- *	FRAME_STATUS_RESIZE
- *	FRAME_STATUS_MOVE
- */
-enum theme_location
-frame_pointer_button(struct frame *frame, void *pointer,
-		     uint32_t button, enum frame_button_state state);
 
 void
 frame_touch_down(struct frame *frame, void *data, int32_t id, int x, int y);

@@ -10,9 +10,10 @@
 
 #include <dix-config.h>
 
+#include <hashtable.h>
+
 #include "misc.h"
 #include "list.h"
-#include "xwm/hash.h"
 #include "screenint.h"
 #include "scrnintstr.h"
 #include "window.h"
@@ -50,8 +51,7 @@ struct xwl_screen {
     struct xorg_list seat_list;
     struct xorg_list damage_window_list;
 
-    pthread_mutex_t window_hash_lock;
-    struct hash_table * window_hash;
+    HashTable clients_window_hash;
 
     int wayland_fd;
     struct wl_display *display;

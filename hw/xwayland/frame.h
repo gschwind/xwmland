@@ -71,6 +71,21 @@ void frame_interior(struct frame *frame, uint32_t *x, uint32_t *y, uint32_t *wid
 
 enum theme_location frame_pointer_motion(struct frame *frame, void *data, int x, int y);
 uint32_t frame_status(struct frame *frame);
+
+/* Call to indicate that a button has been pressed/released.  The return
+ * value for a button release will be the same as for the corresponding
+ * press.  This allows you to more easily track grabs.  If you want the
+ * actual location, simply keep the location from the last
+ * frame_pointer_motion call.
+ *
+ * May set:
+ *	FRAME_STATUS_MINIMIZE
+ *	FRAME_STATUS_MAXIMIZE
+ *	FRAME_STATUS_CLOSE
+ *	FRAME_STATUS_MENU
+ *	FRAME_STATUS_RESIZE
+ *	FRAME_STATUS_MOVE
+ */
 enum theme_location frame_pointer_button(struct frame *frame, void *data, uint32_t btn, enum frame_button_state state);
 void frame_input_rect(struct frame *frame, uint32_t *x, uint32_t *y, uint32_t *width, uint32_t *height);
 

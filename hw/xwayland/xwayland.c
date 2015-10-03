@@ -106,6 +106,26 @@ static DevPrivateKeyRec xwl_window_private_key;
 static DevPrivateKeyRec xwl_screen_private_key;
 static DevPrivateKeyRec xwl_pixmap_private_key;
 
+struct xwl_window *
+xwl_screen_find_window(struct xwl_screen * xwl_screen, XID id) {
+	struct xwl_window ** data;
+	data = ht_find(xwl_screen->clients_window_hash, &id);
+	if(data) {
+		return *data;
+	} else {
+		return NULL;
+	}
+}
+
+void xwl_screen_add_window(struct xwl_screen * xwl_screen, XID id, struct xwl_window * xwl_window) {
+	struct xwl_window ** data = ht_add(xwl_screen->clients_window_hash, &id);
+	*data = xwl_window;
+}
+
+void xwl_screen_remove_window(struct xwl_screen * xwl_screen, XID id) {
+	ht_remove(xwl_screen->clients_window_hash, &id);
+}
+
 struct xwl_screen *
 xwl_screen_get(ScreenPtr screen)
 {
@@ -381,17 +401,8 @@ xwl_window_exposures(WindowPtr pWin, RegionPtr pRegion) {
 	ScreenPtr screen = pWin->drawable.pScreen;
     struct xwl_screen *xwl_screen;
     struct xwl_window *xwl_window;
-	pixman_box16_t * rects;
-	int nrects, i;
 
     LogWrite(0, "xwl_window_exposures %d\n", pWin->drawable.id);
-
-//	rects = pixman_region_rectangles(pRegion, &nrects);
-//	LogWrite(0, "nrect %d :", nrects);
-//	for(i = 0; i < nrects; i++) {
-//		LogWrite(0, " (%d,%d,%d,%d)", rects[i].x1, rects[i].x2, rects[i].y1, rects[i].y2);
-//	}
-//	LogWrite(0, "\n");
 
 	xwl_screen = xwl_screen_get(screen);
 
@@ -406,19 +417,12 @@ xwl_window_exposures(WindowPtr pWin, RegionPtr pRegion) {
     if(pWin == screen->root)
     	return;
 
-    xwl_window = hash_table_lookup(xwl_screen->window_hash, pWin->drawable.id);
+    xwl_window = xwl_screen_find_window(xwl_screen, pWin->drawable.id);
     if(xwl_window == NULL)
     	return;
 
     if(xwl_window->frame_window != pWin)
     	return;
-
-//	rects = pixman_region_rectangles(&(pWin->clipList), &nrects);
-//	LogWrite(0, "nrect %d :", nrects);
-//	for(i = 0; i < nrects; i++) {
-//		LogWrite(0, " (%d,%d,%d,%d)", rects[i].x1, rects[i].x2, rects[i].y1, rects[i].y2);
-//	}
-//	LogWrite(0, "\n");
 
     xwl_window->layout_is_dirty = 1;
 
@@ -429,10 +433,8 @@ xwl_screen_change_window_attributes(WindowPtr pWin, unsigned long vmask) {
 		ScreenPtr screen = pWin->drawable.pScreen;
     struct xwl_screen *xwl_screen;
     struct xwl_window *xwl_window;
-	pixman_box16_t * rects;
-	int nrects, i;
 
-    LogWrite(0, "xwl_screen_change_window_attributes %d\n", pWin->drawable.id);
+    //LogWrite(0, "xwl_screen_change_window_attributes %d\n", pWin->drawable.id);
 
 	xwl_screen = xwl_screen_get(screen);
 
@@ -447,7 +449,7 @@ xwl_screen_change_window_attributes(WindowPtr pWin, unsigned long vmask) {
     if(pWin == screen->root)
     	return FALSE;
 
-    xwl_window = hash_table_lookup(xwl_screen->window_hash, pWin->drawable.id);
+    xwl_window = xwl_screen_find_window(xwl_screen, pWin->drawable.id);
     if(xwl_window == NULL)
     	return FALSE;
 
@@ -474,17 +476,8 @@ xwl_clip_notify(WindowPtr pWin, int dx, int dy) {
 	ScreenPtr screen = pWin->drawable.pScreen;
     struct xwl_screen *xwl_screen;
     struct xwl_window *xwl_window;
-	pixman_box16_t * rects;
-	int nrects, i;
 
     LogWrite(0, "xwl_clip_notify %d\n", pWin->drawable.id);
-
-//	rects = pixman_region_rectangles(&(pWin->clipList), &nrects);
-//	LogWrite(0, "nrect %d :", nrects);
-//	for(i = 0; i < nrects; i++) {
-//		LogWrite(0, " (%d,%d,%d,%d)", rects[i].x1, rects[i].x2, rects[i].y1, rects[i].y2);
-//	}
-//	LogWrite(0, "\n");
 
 	xwl_screen = xwl_screen_get(screen);
 
@@ -499,7 +492,7 @@ xwl_clip_notify(WindowPtr pWin, int dx, int dy) {
     if(pWin == screen->root)
     	return;
 
-    xwl_window = hash_table_lookup(xwl_screen->window_hash, pWin->drawable.id);
+    xwl_window = xwl_screen_find_window(xwl_screen, pWin->drawable.id);
     if(xwl_window == NULL)
     	return;
 
@@ -526,7 +519,7 @@ xwl_clear_to_background(WindowPtr pWin, int x, int y, int w, int h, Bool generat
     xwl_screen->ClearToBackground = screen->ClearToBackground;
     screen->ClearToBackground = xwl_clear_to_background;
 
-    xwl_window = hash_table_lookup(xwl_screen->window_hash, pWin->drawable.id);
+    xwl_window = xwl_screen_find_window(xwl_screen, pWin->drawable.id);
     if(xwl_window == NULL)
     	return;
 
@@ -577,7 +570,7 @@ xwl_realize_window(WindowPtr window)
     	return ret;
     }
 
-    xwl_window = hash_table_lookup(xwl_screen->window_hash, window->drawable.id);
+    xwl_window = xwl_screen_find_window(xwl_screen, window->drawable.id);
 
     if(xwl_window != NULL) {
     	LogWrite(0, "END xwl_realize_window %d (Window already managed)\n", window->drawable.id);
@@ -662,8 +655,8 @@ xwl_realize_window(WindowPtr window)
 
 		LogWrite(0, "Frame = %p, err = %d\n", xwl_window->frame_window, err);
 
-		hash_table_insert(xwl_screen->window_hash, window->drawable.id, xwl_window);
-		hash_table_insert(xwl_screen->window_hash, xwl_window->frame_window->drawable.id, xwl_window);
+		xwl_screen_add_window(xwl_screen, window->drawable.id, xwl_window);
+		xwl_screen_add_window(xwl_screen, xwl_window->frame_window->drawable.id, xwl_window);
 
 		ReparentWindow(window, xwl_window->frame_window, x, y, serverClient);
 		MapWindow(window, serverClient);
@@ -718,7 +711,7 @@ xwl_realize_window(WindowPtr window)
 		xwl_window->frame = NULL;
 		xwl_window->frame_window = NULL;
 
-		hash_table_insert(xwl_screen->window_hash, window->drawable.id, xwl_window);
+		xwl_screen_add_window(xwl_screen, window->drawable.id, xwl_window);
 
 		MapWindow(xwl_window->client_window, serverClient);
 
@@ -787,13 +780,18 @@ xwl_realize_window(WindowPtr window)
 		    }
 
 		    if(xwl_seat_found) {
-		    	wl_shell_surface_set_popup(xwl_window->shell_surface,
-		    			xwl_seat_found->seat,
-						xwl_seat_found->pointer_enter_serial,
-						xwl_window->transient_for->surface,
-						xwl_window->client_window->origin.x - parent_x,
-						xwl_window->client_window->origin.y - parent_y,
-						0);
+//		    	wl_shell_surface_set_popup(xwl_window->shell_surface,
+//		    			xwl_seat_found->seat,
+//						xwl_seat_found->pointer_enter_serial,
+//						xwl_window->transient_for->surface,
+//						xwl_window->client_window->origin.x - parent_x,
+//						xwl_window->client_window->origin.y - parent_y,
+//						0);
+		    	wl_shell_surface_set_transient(xwl_window->shell_surface,
+		    			xwl_window->transient_for->surface,
+		    			xwl_window->client_window->origin.x - parent_x,
+		    			xwl_window->client_window->origin.y - parent_y,
+		    			0);
 		    } else {
 		    	wl_shell_surface_set_transient(xwl_window->shell_surface,
 		    			xwl_window->transient_for->surface,
@@ -895,9 +893,9 @@ xwl_unrealize_window(WindowPtr window)
     if(xwl_window->starting)
     	return ret;
 
-    hash_table_remove(xwl_screen->window_hash, xwl_window->client_window->drawable.id);
+    xwl_screen_remove_window(xwl_screen, xwl_window->client_window->drawable.id);
     if(xwl_window->frame_window)
-    	hash_table_remove(xwl_screen->window_hash, xwl_window->frame_window->drawable.id);
+    	xwl_screen_remove_window(xwl_screen, xwl_window->frame_window->drawable.id);
 
     if(xwl_window->frame)
     	frame_destroy(xwl_window->frame);
@@ -1200,8 +1198,7 @@ xwl_screen_init(ScreenPtr pScreen, int argc, char **argv)
     xorg_list_init(&xwl_screen->seat_list);
     xorg_list_init(&xwl_screen->damage_window_list);
 
-    pthread_mutex_init(&(xwl_screen->window_hash_lock), NULL);
-    xwl_screen->window_hash = hash_table_create();
+    xwl_screen->clients_window_hash = ht_create(sizeof(XID), sizeof(void*), ht_resourceid_hash, ht_resourceid_compare, NULL);
     xwl_screen->depth = 24;
 
     xwl_screen->display = wl_display_connect(NULL);

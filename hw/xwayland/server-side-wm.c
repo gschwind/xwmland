@@ -14,6 +14,8 @@
 #include "xwl_screen.h"
 #include "xwl_window.h"
 
+#include "xwayland.h"
+
 #include <wayland-client-protocol.h>
 
 #include "windowstr.h"
@@ -606,15 +608,12 @@ window_manager_window_read_properties(struct xwl_window *window)
 				strndup(prop->data, prop->size);
 			break;
 		case XA_WINDOW:
-			LogWrite(0, "FOUND transient %d\n", xid);
 			xid = prop->data;
-			*(struct xwl_window**)p = hash_table_lookup(window->xwl_screen->window_hash, *xid);
+			*(struct xwl_window**)p = xwl_screen_find_window(window->xwl_screen, *xid);
 
 			if (!*(struct xwl_window**)p)
 				LogWrite(0, "XCB_ATOM_WINDOW contains window"
 					   " id not found in hash table.\n");
-			else
-				LogWrite(0, "FOUND transient %d\n", xid);
 
 			break;
 		case XA_CARDINAL:

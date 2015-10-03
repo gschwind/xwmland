@@ -188,7 +188,7 @@ window_manager_window_draw_frame(struct frame * frame) {
 static void
 window_manager_handle_configure_notify(struct window_manager *wm, xcb_generic_event_t *event) {
 	struct xcb_configure_notify_event_t * configure_notify = (struct xcb_configure_notify_event_t*)event;
-	struct xwl_window * window;
+	//struct xwl_window * window;
 	printf("XCB_CONFIGURE_NOTIFY (window %d) %d,%d @ %dx%d\n",
 	       configure_notify->window,
 	       configure_notify->x, configure_notify->y,
@@ -322,6 +322,8 @@ void * window_manager_init_conn_func(void * data) {
 	xcb_atom_t wm_sn_atom;
 	xcb_atom_t cm_sn_atom;
 	uint32_t attrs[2];
+	uint32_t attrs_mask;
+	xcb_window_t identity_window;
 
 	wm->conn = xcb_connect_to_fd(wm->fd[0], NULL);
 	if((err = xcb_connection_has_error(wm->conn)) > 0) {
@@ -338,10 +340,10 @@ void * window_manager_init_conn_func(void * data) {
 	/* OVERRIDE_REDIRECT */
 	attrs[0] = 1;
 	attrs[1] = XCB_EVENT_MASK_STRUCTURE_NOTIFY|XCB_EVENT_MASK_PROPERTY_CHANGE;
-	uint32_t attrs_mask = XCB_CW_OVERRIDE_REDIRECT|XCB_CW_EVENT_MASK;
+	attrs_mask = XCB_CW_OVERRIDE_REDIRECT|XCB_CW_EVENT_MASK;
 
 	/* Warning: This window must be focusable, thus it MUST be an INPUT_OUTPUT window */
-	xcb_window_t identity_window = xcb_generate_id(wm->conn);
+	identity_window = xcb_generate_id(wm->conn);
 	wm->identity_window = identity_window;
 	xcb_create_window(wm->conn, XCB_COPY_FROM_PARENT, identity_window,
 			screen->root, -100, -100, 1, 1, 0, XCB_WINDOW_CLASS_INPUT_OUTPUT,
@@ -367,7 +369,7 @@ void * window_manager_init_conn_func(void * data) {
 
 
 struct window_manager *
-window_manager_create()
+window_manager_create(void)
 {
 	struct window_manager *wm;
 
