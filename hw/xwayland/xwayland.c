@@ -466,6 +466,10 @@ xwl_screen_change_window_attributes(WindowPtr pWin, unsigned long vmask) {
 
     }
 
+    if((vmask & (CWBorderWidth)) && xwl_window->frame) {
+    	xwl_window->layout_is_dirty = 1;
+    }
+
 	return FALSE;
 }
 
@@ -619,9 +623,6 @@ xwl_realize_window(WindowPtr window)
 		frame_resize_inside(xwl_window->frame, window->drawable.width, window->drawable.height);
 		frame_interior(xwl_window->frame, &x, &y, (uint32_t*)NULL, (uint32_t*)NULL);
 
-		values[0] = 0;
-		ChangeWindowAttributes(xwl_window->client_window, CWBorderWidth, values, serverClient);
-
 		xwl_window->layout_is_dirty = 1;
 		xwl_window->has_32b_visual = visual_is_depth_32(xwl_screen, attr.visualID);
 		if(xwl_window->has_32b_visual) {
@@ -641,6 +642,7 @@ xwl_realize_window(WindowPtr window)
 				(int)xwl_screen->colormap->class,
 				(int)xwl_screen->colormap->mid);
 
+
 		xwl_window->frame_window = CreateWindow(FakeClientID(0), screen->root,
 				0, 0,
 				frame_width(xwl_window->frame),
@@ -657,6 +659,8 @@ xwl_realize_window(WindowPtr window)
 		xwl_screen_add_window(xwl_screen, window->drawable.id, xwl_window);
 		xwl_screen_add_window(xwl_screen, xwl_window->frame_window->drawable.id, xwl_window);
 
+		values[0] = 0;
+		ConfigureWindow(xwl_window->client_window, CWBorderWidth, values, serverClient);
 		ReparentWindow(window, xwl_window->frame_window, x, y, serverClient);
 		MapWindow(window, serverClient);
 		MapWindow(xwl_window->frame_window, serverClient);
