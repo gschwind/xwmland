@@ -402,7 +402,7 @@ xwl_window_exposures(WindowPtr pWin, RegionPtr pRegion) {
     struct xwl_screen *xwl_screen;
     struct xwl_window *xwl_window;
 
-    LogWrite(0, "xwl_window_exposures %d\n", pWin->drawable.id);
+    //LogWrite(0, "xwl_window_exposures %d\n", pWin->drawable.id);
 
 	xwl_screen = xwl_screen_get(screen);
 
@@ -595,7 +595,6 @@ xwl_realize_window(WindowPtr window)
 	xwl_window->surface = NULL;
 	xwl_window->shell_surface = NULL;
 	xwl_window->override_redirect = attr.override;
-	xwl_window->starting = 1;
 
 	xorg_list_init(&(xwl_window->list_childdren));
 	xorg_list_init(&(xwl_window->link_sibling));
@@ -854,10 +853,68 @@ xwl_realize_window(WindowPtr window)
 
 	}
 
-	xwl_window->starting = 0;
 	LogWrite(0, "END xwl_realize_window %d\n", window->drawable.id);
     return ret;
 }
+
+
+//Bool xwl_create_window(WindowPtr pWin) {
+//
+//}
+//
+//Bool xwl_destroy_window(WindowPtr pWin) {
+//    ScreenPtr screen = window->drawable.pScreen;
+//    struct xwl_screen *xwl_screen;
+//    struct xwl_window *xwl_window;
+//    struct xwl_seat *xwl_seat;
+//    Bool ret;
+//
+//	LogWrite(0, "xwl_destroy_window %d (viewable:%s)\n", window->drawable.id, (window->viewable?"True":"False"));
+//
+//    xwl_screen = xwl_screen_get(screen);
+//
+//    if(xwl_screen->DestroyWindow) {
+//		screen->DestroyWindow = xwl_screen->DestroyWindow;
+//		ret = (*screen->DestroyWindow) (window);
+//		xwl_screen->DestroyWindow = screen->DestroyWindow;
+//		screen->DestroyWindow = xwl_destroy_window;
+//    }
+//
+//    xorg_list_for_each_entry(xwl_seat, &xwl_screen->seat_list, link) {
+//        if (xwl_seat->focus_window && xwl_seat->focus_window->client_window == window)
+//            xwl_seat->focus_window = NULL;
+//
+//        xwl_seat_clear_touch(xwl_seat, window);
+//    }
+//
+//    xwl_window =
+//        dixLookupPrivate(&window->devPrivates, &xwl_window_private_key);
+//    if (!xwl_window) {
+//        return ret;
+//    }
+//
+//    if(xwl_window->starting)
+//    	return ret;
+//
+//    xwl_screen_remove_window(xwl_screen, xwl_window->client_window->drawable.id);
+//    if(xwl_window->frame_window)
+//    	xwl_screen_remove_window(xwl_screen, xwl_window->frame_window->drawable.id);
+//
+//    if(xwl_window->frame)
+//    	frame_destroy(xwl_window->frame);
+//
+//    if(xwl_window->shell_surface)
+//    	wl_shell_surface_destroy(xwl_window->shell_surface);
+//
+//    if(!xorg_list_is_empty(&xwl_window->link_sibling)) {
+//    	xorg_list_del(&xwl_window->link_sibling);
+//    }
+//
+//    free(xwl_window);
+//    dixSetPrivate(&window->devPrivates, &xwl_window_private_key, NULL);
+//    return ret;
+//
+//}
 
 static Bool
 xwl_unrealize_window(WindowPtr window)
@@ -880,7 +937,6 @@ xwl_unrealize_window(WindowPtr window)
     xorg_list_for_each_entry(xwl_seat, &xwl_screen->seat_list, link) {
         if (xwl_seat->focus_window && xwl_seat->focus_window->client_window == window)
             xwl_seat->focus_window = NULL;
-
         xwl_seat_clear_touch(xwl_seat, window);
     }
 
@@ -890,12 +946,9 @@ xwl_unrealize_window(WindowPtr window)
         return ret;
     }
 
-    if(xwl_window->starting)
-    	return ret;
-
-    xwl_screen_remove_window(xwl_screen, xwl_window->client_window->drawable.id);
-    if(xwl_window->frame_window)
+   if(xwl_window->frame_window) {
     	xwl_screen_remove_window(xwl_screen, xwl_window->frame_window->drawable.id);
+   }
 
     if(xwl_window->frame)
     	frame_destroy(xwl_window->frame);

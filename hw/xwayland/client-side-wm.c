@@ -346,7 +346,7 @@ void * window_manager_init_conn_func(void * data) {
 	identity_window = xcb_generate_id(wm->conn);
 	wm->identity_window = identity_window;
 	xcb_create_window(wm->conn, XCB_COPY_FROM_PARENT, identity_window,
-			screen->root, -100, -100, 1, 1, 0, XCB_WINDOW_CLASS_INPUT_OUTPUT,
+			screen->root, -100, -100, 1, 1, 0, XCB_WINDOW_CLASS_INPUT_ONLY,
 			XCB_COPY_FROM_PARENT, attrs_mask, attrs);
 
 	xcb_change_property(wm->conn, XCB_PROP_MODE_REPLACE, identity_window, get_atom(wm, "_NET_WM_NAME"), get_atom(wm, "UTF8_STRING"), 8, strlen(name), name);
