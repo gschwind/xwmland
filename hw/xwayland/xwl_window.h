@@ -52,6 +52,7 @@ struct xwl_window {
     DamagePtr damage;
     struct xorg_list link_damage;
     struct xorg_list link_window;
+    struct xorg_list link_cleanup;
     struct wl_callback *frame_callback;
 
     int has_32b_visual;

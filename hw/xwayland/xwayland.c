@@ -602,6 +602,7 @@ xwl_realize_window(WindowPtr window)
 
 	xorg_list_init(&(xwl_window->list_childdren));
 	xorg_list_init(&(xwl_window->link_sibling));
+	xorg_list_init(&(xwl_window->link_cleanup));
 
 	if(!attr.override) {
 		DeviceIntPtr dev;
@@ -656,9 +657,6 @@ xwl_realize_window(WindowPtr window)
 
 		LogWrite(0, "Frame = %p, err = %d\n", xwl_window->frame_window, err);
 
-		xwl_screen_add_window(xwl_screen, window->drawable.id, xwl_window);
-		xwl_screen_add_window(xwl_screen, xwl_window->frame_window->drawable.id, xwl_window);
-
 		values[0] = 0;
 		ConfigureWindow(xwl_window->client_window, CWBorderWidth, values, serverClient);
 		ReparentWindow(window, xwl_window->frame_window, x, y, serverClient);
@@ -690,6 +688,8 @@ xwl_realize_window(WindowPtr window)
 		wl_display_flush(xwl_screen->display);
 		wl_surface_set_user_data(xwl_window->surface, xwl_window);
 
+		xwl_screen_add_window(xwl_screen, window->drawable.id, xwl_window);
+		xwl_screen_add_window(xwl_screen, xwl_window->frame_window->drawable.id, xwl_window);
 		dixSetPrivate(&window->devPrivates, &xwl_window_private_key, xwl_window);
 
 		xwl_window->damage =
@@ -713,8 +713,6 @@ xwl_realize_window(WindowPtr window)
 
 		xwl_window->frame = NULL;
 		xwl_window->frame_window = NULL;
-
-		xwl_screen_add_window(xwl_screen, window->drawable.id, xwl_window);
 
 		MapWindow(xwl_window->client_window, serverClient);
 
@@ -844,6 +842,7 @@ xwl_realize_window(WindowPtr window)
 		wl_display_flush(xwl_screen->display);
 		wl_surface_set_user_data(xwl_window->surface, xwl_window);
 
+		xwl_screen_add_window(xwl_screen, window->drawable.id, xwl_window);
 		dixSetPrivate(&window->devPrivates, &xwl_window_private_key, xwl_window);
 
 		xwl_window->damage =
@@ -929,14 +928,9 @@ xwl_unrealize_window(WindowPtr window)
     struct xwl_seat *xwl_seat;
     Bool ret;
 
-	LogWrite(0, "xwl_unrealize_window %d (viewable:%s)\n", window->drawable.id, (window->viewable?"True":"False"));
+	LogWrite(0, "START xwl_unrealize_window %d (viewable:%s)\n", window->drawable.id, (window->viewable?"True":"False"));
 
     xwl_screen = xwl_screen_get(screen);
-
-    screen->UnrealizeWindow = xwl_screen->UnrealizeWindow;
-    ret = (*screen->UnrealizeWindow) (window);
-    xwl_screen->UnrealizeWindow = screen->UnrealizeWindow;
-    screen->UnrealizeWindow = xwl_unrealize_window;
 
     xorg_list_for_each_entry(xwl_seat, &xwl_screen->seat_list, link) {
         if (xwl_seat->focus_window && xwl_seat->focus_window->client_window == window)
@@ -944,18 +938,28 @@ xwl_unrealize_window(WindowPtr window)
         xwl_seat_clear_touch(xwl_seat, window);
     }
 
-    xwl_window =
-        dixLookupPrivate(&window->devPrivates, &xwl_window_private_key);
-    if (!xwl_window) {
-        return ret;
+    /** we know what to do with our windows **/
+    if(CLIENT_ID(window->drawable.id) == 0) {
+    	LogWrite(0, "END xwl_unrealize_window %d (viewable:%s) (Server Window)\n", window->drawable.id, (window->viewable?"True":"False"));
+    	goto finish;
     }
 
-   if(xwl_window->frame_window) {
-    	xwl_screen_remove_window(xwl_screen, xwl_window->frame_window->drawable.id);
-   }
+    xwl_window = xwl_screen_find_window(xwl_screen, window->drawable.id);
 
-    if(xwl_window->frame)
-    	frame_destroy(xwl_window->frame);
+//    xwl_window = dixLookupPrivate(&window->devPrivates, &xwl_window_private_key);
+
+    if (!xwl_window) {
+    	LogWrite(0, "END xwl_unrealize_window %d (viewable:%s) (Window Not found)\n", window->drawable.id, (window->viewable?"True":"False"));
+    	goto finish;
+    }
+
+    dixSetPrivate(&window->devPrivates, &xwl_window_private_key, NULL);
+
+    if(xwl_window->client_window)
+     	xwl_screen_remove_window(xwl_screen, xwl_window->client_window->drawable.id);
+
+    if(xwl_window->frame_window)
+    	xwl_screen_remove_window(xwl_screen, xwl_window->frame_window->drawable.id);
 
     if(xwl_window->shell_surface)
     	wl_shell_surface_destroy(xwl_window->shell_surface);
@@ -973,9 +977,29 @@ xwl_unrealize_window(WindowPtr window)
     if (xwl_window->frame_callback)
         wl_callback_destroy(xwl_window->frame_callback);
 
-    free(xwl_window);
-    dixSetPrivate(&window->devPrivates, &xwl_window_private_key, NULL);
-    return ret;
+    wl_display_flush(xwl_screen->display);
+
+    if(xwl_window->frame_window) {
+    	xorg_list_add(&xwl_window->link_cleanup, &xwl_screen->cleanup_window_list);
+		//compUnredirectWindow(serverClient, xwl_window->frame_window, CompositeRedirectManual);
+    	//UnmapWindow(xwl_window->frame_window, FALSE);
+        //ReparentWindow(xwl_window->client_window, xwl_screen->screen->root, 0, 0, serverClient);
+        //DeleteWindow(xwl_window->frame_window, xwl_window->frame_window->drawable.id);
+        //if(xwl_window->frame)
+        //	frame_destroy(xwl_window->frame);
+    } else {
+    	//compUnredirectWindow(serverClient, xwl_window->client_window, CompositeRedirectManual);
+        free(xwl_window);
+    }
+
+	LogWrite(0, "END xwl_unrealize_window %d (viewable:%s) (Finish normaly)\n", window->drawable.id, (window->viewable?"True":"False"));
+
+finish:
+    screen->UnrealizeWindow = xwl_screen->UnrealizeWindow;
+    ret = (*screen->UnrealizeWindow) (window);
+    xwl_screen->UnrealizeWindow = screen->UnrealizeWindow;
+    screen->UnrealizeWindow = xwl_unrealize_window;
+	return ret;
 }
 
 static Bool
@@ -1005,6 +1029,26 @@ xwl_screen_post_damage(struct xwl_screen *xwl_screen)
     BoxPtr box;
     struct wl_buffer *buffer;
     PixmapPtr pixmap;
+    WindowPtr child_iterator;
+
+
+    xorg_list_for_each_entry_safe(xwl_window, next_xwl_window,
+                                  &xwl_screen->cleanup_window_list, link_cleanup) {
+    	xorg_list_del(&xwl_window->link_cleanup);
+    	UnmapWindow(xwl_window->frame_window, FALSE);
+
+    	/* remove all children before deleting the window */
+    	child_iterator = xwl_window->frame_window->firstChild;
+    	while(child_iterator) {
+    		ReparentWindow(child_iterator, xwl_screen->screen->root, 0, 0, serverClient);
+    		child_iterator = child_iterator->nextSib;
+    	}
+
+        DeleteWindow(xwl_window->frame_window, xwl_window->frame_window->drawable.id);
+        if(xwl_window->frame)
+        	frame_destroy(xwl_window->frame);
+    	free(xwl_window);
+    }
 
     xorg_list_for_each_entry_safe(xwl_window, next_xwl_window,
                                   &xwl_screen->damage_window_list, link_damage) {
@@ -1254,6 +1298,7 @@ xwl_screen_init(ScreenPtr pScreen, int argc, char **argv)
     xorg_list_init(&xwl_screen->output_list);
     xorg_list_init(&xwl_screen->seat_list);
     xorg_list_init(&xwl_screen->damage_window_list);
+    xorg_list_init(&xwl_screen->cleanup_window_list);
 
     xwl_screen->clients_window_hash = ht_create(sizeof(XID), sizeof(void*), ht_resourceid_hash, ht_resourceid_compare, NULL);
     xwl_screen->depth = 24;

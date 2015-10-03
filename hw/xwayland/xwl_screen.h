@@ -50,6 +50,7 @@ struct xwl_screen {
     struct xorg_list output_list;
     struct xorg_list seat_list;
     struct xorg_list damage_window_list;
+    struct xorg_list cleanup_window_list;
 
     HashTable clients_window_hash;
 
