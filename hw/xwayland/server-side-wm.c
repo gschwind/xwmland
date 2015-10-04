@@ -53,6 +53,15 @@ void xwl_screen_setup_net_supported(struct xwl_screen *xwl_screen) {
 
 }
 
+
+void ClientLogWrite(int verb, const char *f, ...) {
+    va_list args;
+
+    va_start(args, f);
+    LogVWrite(verb, f, args);
+    va_end(args);
+}
+
 void xwl_window_send_focus_window(struct xwl_window *xwl_window)
 {
 	DeviceIntPtr dev;

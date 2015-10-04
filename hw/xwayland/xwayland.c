@@ -434,7 +434,9 @@ xwl_screen_change_window_attributes(WindowPtr pWin, unsigned long vmask) {
     struct xwl_screen *xwl_screen;
     struct xwl_window *xwl_window;
 
-    //LogWrite(0, "xwl_screen_change_window_attributes %d\n", pWin->drawable.id);
+    LogWrite(0, "xwl_screen_change_window_attributes %d (%d,%d,%d,%d)\n",
+    		pWin->drawable.id, (int)pWin->drawable.x,  (int)pWin->drawable.y,
+			 (int)pWin->drawable.width, (int)pWin->drawable.height);
 
 	xwl_screen = xwl_screen_get(screen);
 
@@ -964,8 +966,6 @@ xwl_unrealize_window(WindowPtr window)
     if(xwl_window->shell_surface)
     	wl_shell_surface_destroy(xwl_window->shell_surface);
 
-    wl_surface_destroy(xwl_window->surface);
-
     if(!xorg_list_is_empty(&xwl_window->link_sibling)) {
     	xorg_list_del(&xwl_window->link_sibling);
     }
@@ -976,6 +976,8 @@ xwl_unrealize_window(WindowPtr window)
     DamageDestroy(xwl_window->damage);
     if (xwl_window->frame_callback)
         wl_callback_destroy(xwl_window->frame_callback);
+
+    wl_surface_destroy(xwl_window->surface);
 
     wl_display_flush(xwl_screen->display);
 
@@ -1030,18 +1032,25 @@ xwl_screen_post_damage(struct xwl_screen *xwl_screen)
     struct wl_buffer *buffer;
     PixmapPtr pixmap;
     WindowPtr child_iterator;
+    struct xorg_list tmp;
+
+    /* copy the the list and clear old one to be re-entrant */
+    xorg_list_add(&tmp, &xwl_screen->cleanup_window_list);
+    xorg_list_del(&xwl_screen->cleanup_window_list);
 
 
     xorg_list_for_each_entry_safe(xwl_window, next_xwl_window,
-                                  &xwl_screen->cleanup_window_list, link_cleanup) {
+             &tmp, link_cleanup) {
+
     	xorg_list_del(&xwl_window->link_cleanup);
     	UnmapWindow(xwl_window->frame_window, FALSE);
 
     	/* remove all children before deleting the window */
     	child_iterator = xwl_window->frame_window->firstChild;
     	while(child_iterator) {
+    		WindowPtr next_iterator = child_iterator->nextSib;
     		ReparentWindow(child_iterator, xwl_screen->screen->root, 0, 0, serverClient);
-    		child_iterator = child_iterator->nextSib;
+    		child_iterator = next_iterator;
     	}
 
         DeleteWindow(xwl_window->frame_window, xwl_window->frame_window->drawable.id);

@@ -41,6 +41,9 @@ enum cursor_type {
 	XWM_CURSOR_LEFT_PTR,
 };
 
+
+void ClientLogWrite(int verb, const char *f, ...);
+
 void register_wm_callback(struct window_manager * wm);
 void window_manager_get_resources(struct xwl_screen *wm);
 void window_manager_get_visual_and_colormap(struct xwl_screen *wm);

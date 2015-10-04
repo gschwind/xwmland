@@ -158,9 +158,20 @@ window_manager_handle_map_notify(struct window_manager *wm, xcb_generic_event_t 
 {
 	xcb_map_notify_event_t * map = (xcb_map_notify_event_t *) event;
 	uint32_t values;
-	printf("XCB_MAP_NOTIFY (window %d)\n", map->window);
+	ClientLogWrite(0, "XCB_MAP_NOTIFY (window %d)\n", map->window);
 	values = XCB_EVENT_MASK_PROPERTY_CHANGE|XCB_EVENT_MASK_STRUCTURE_NOTIFY;
 	xcb_change_window_attributes(wm->conn, map->window, XCB_CW_EVENT_MASK, &values);
+
+}
+
+static void
+window_manager_handle_unmap_notify(struct window_manager *wm, xcb_generic_event_t *event)
+{
+	xcb_unmap_notify_event_t * map = (xcb_unmap_notify_event_t *) event;
+	uint32_t values;
+	ClientLogWrite(0, "XCB_UNMAP_NOTIFY (window %d)\n", map->window);
+	//values = XCB_EVENT_MASK_PROPERTY_CHANGE|XCB_EVENT_MASK_STRUCTURE_NOTIFY;
+	//xcb_change_window_attributes(wm->conn, map->window, XCB_CW_EVENT_MASK, &values);
 
 }
 
@@ -244,9 +255,9 @@ window_manager_handle_event(struct window_manager *wm)
 		case XCB_MAP_NOTIFY:
 			window_manager_handle_map_notify(wm, event);
 			break;
-//		case XCB_UNMAP_NOTIFY:
-//			weston_wm_handle_unmap_notify(wm, event);
-//			break;
+		case XCB_UNMAP_NOTIFY:
+			window_manager_handle_unmap_notify(wm, event);
+			break;
 //		case XCB_REPARENT_NOTIFY:
 //			weston_wm_handle_reparent_notify(wm, event);
 //			break;
