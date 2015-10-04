@@ -53,17 +53,17 @@ struct xwl_window {
     struct xorg_list link_damage;
     struct xorg_list link_window;
     struct xorg_list link_cleanup;
+    struct xorg_list link_dirty;
     struct wl_callback *frame_callback;
 
     int has_32b_visual;
-    int layout_is_dirty;
 	int properties_dirty;
 	int pid;
 	char *machine;
 	char *class_;
 	char *name;
 	struct xwl_window *transient_for;
-	struct xwl_window *below;
+	struct xwl_window *below_me;
 	uint32_t protocols;
 	Atom type;
 	int width, height;
