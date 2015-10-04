@@ -380,7 +380,7 @@ shell_surface_configure(void *data,
 	frame_interior(xwl_window->frame, &values[0], &values[1], &values[2], &values[3]);
 	ConfigureWindow(xwl_window->client_window, CWX|CWY|CWWidth|CWHeight, values, serverClient);
 
-	xwl_window->layout_is_dirty = 1;
+	xwl_window_dirty_layout(xwl_window);
 
 }
 
@@ -424,7 +424,7 @@ xwl_window_exposures(WindowPtr pWin, RegionPtr pRegion) {
     if(xwl_window->frame_window != pWin)
     	return;
 
-    xwl_window->layout_is_dirty = 1;
+    xwl_window_dirty_layout(xwl_window);
 
 }
 
@@ -463,13 +463,13 @@ xwl_screen_change_window_attributes(WindowPtr pWin, unsigned long vmask) {
 			|| pWin->drawable.width != w
 			|| pWin->drawable.height != h
     	) {
-    		xwl_window->layout_is_dirty = 1;
+    		xwl_window_dirty_layout(xwl_window);
     	}
 
     }
 
     if((vmask & (CWBorderWidth)) && xwl_window->frame) {
-    	xwl_window->layout_is_dirty = 1;
+		xwl_window_dirty_layout(xwl_window);
     }
 
 	return FALSE;
@@ -605,6 +605,7 @@ xwl_realize_window(WindowPtr window)
 	xorg_list_init(&(xwl_window->list_childdren));
 	xorg_list_init(&(xwl_window->link_sibling));
 	xorg_list_init(&(xwl_window->link_cleanup));
+	xorg_list_init(&(xwl_window->link_dirty));
 
 	if(!attr.override) {
 		DeviceIntPtr dev;
@@ -626,7 +627,8 @@ xwl_realize_window(WindowPtr window)
 		frame_resize_inside(xwl_window->frame, window->drawable.width, window->drawable.height);
 		frame_interior(xwl_window->frame, &x, &y, (uint32_t*)NULL, (uint32_t*)NULL);
 
-		xwl_window->layout_is_dirty = 1;
+		xwl_window_dirty_layout(xwl_window);
+
 		xwl_window->has_32b_visual = visual_is_depth_32(xwl_screen, attr.visualID);
 		if(xwl_window->has_32b_visual) {
 			visual = attr.visualID;
@@ -747,39 +749,38 @@ xwl_realize_window(WindowPtr window)
 			 * The current window goes on top of the last one. Else the window
 			 * will be above the transient for.
 			 **/
-			xwl_window->below = NULL;
+			xwl_window->below_me = NULL;
 
 			xorg_list_for_each_entry(window_iterator, &(xwl_window->transient_for->list_childdren), link_sibling) {
 				/* if this is a not managed window, go above it */
 				if(!window_iterator->frame) {
-					xwl_window->below = window_iterator;
+					xwl_window->below_me = window_iterator;
 					break;
 				}
 			}
 
 			/* if below still unset, go above transient_for */
-			if(!xwl_window->below) {
-				xwl_window->below = xwl_window->transient_for;
+			if(!xwl_window->below_me) {
+				xwl_window->below_me = xwl_window->transient_for;
 			}
 
 			/** add current window to the sibling list */
 			xorg_list_add(&(xwl_window->link_sibling), &(xwl_window->transient_for->list_childdren));
 
-
 		    xorg_list_for_each_entry(seat_iterator, &xwl_screen->seat_list, link) {
 		    	if((seat_iterator->focus_window == xwl_window->transient_for)
-		    		|| (seat_iterator->focus_window == xwl_window->below)) {
+		    		|| (seat_iterator->focus_window == xwl_window->below_me)) {
 		    		xwl_seat_found = seat_iterator;
 		    		break;
 		    	}
 		    }
 
-		    if(xwl_window->transient_for->frame_window) {
-		    	parent_x = xwl_window->transient_for->frame_window->origin.x;
-		    	parent_y = xwl_window->transient_for->frame_window->origin.y;
+		    if(xwl_window->below_me->frame_window) {
+		    	parent_x = xwl_window->below_me->frame_window->origin.x;
+		    	parent_y = xwl_window->below_me->frame_window->origin.y;
 		    } else {
-		    	parent_x = xwl_window->transient_for->client_window->origin.x;
-		    	parent_y = xwl_window->transient_for->client_window->origin.y;
+		    	parent_x = xwl_window->below_me->client_window->origin.x;
+		    	parent_y = xwl_window->below_me->client_window->origin.y;
 		    }
 
 		    if(xwl_seat_found) {
@@ -791,13 +792,13 @@ xwl_realize_window(WindowPtr window)
 //						xwl_window->client_window->origin.y - parent_y,
 //						0);
 		    	wl_shell_surface_set_transient(xwl_window->shell_surface,
-		    			xwl_window->transient_for->surface,
+		    			xwl_window->below_me->surface,
 		    			xwl_window->client_window->origin.x - parent_x,
 		    			xwl_window->client_window->origin.y - parent_y,
 		    			0);
 		    } else {
 		    	wl_shell_surface_set_transient(xwl_window->shell_surface,
-		    			xwl_window->transient_for->surface,
+		    			xwl_window->below_me->surface,
 		    			xwl_window->client_window->origin.x - parent_x,
 		    			xwl_window->client_window->origin.y - parent_y,
 		    			0);
@@ -970,6 +971,10 @@ xwl_unrealize_window(WindowPtr window)
     	xorg_list_del(&xwl_window->link_sibling);
     }
 
+    if(!xorg_list_is_empty(&xwl_window->link_dirty)) {
+    	xorg_list_del(&xwl_window->link_dirty);
+    }
+
     if (RegionNotEmpty(DamageRegion(xwl_window->damage)))
         xorg_list_del(&xwl_window->link_damage);
     DamageUnregister(xwl_window->damage);
@@ -1038,7 +1043,6 @@ xwl_screen_post_damage(struct xwl_screen *xwl_screen)
     xorg_list_add(&tmp, &xwl_screen->cleanup_window_list);
     xorg_list_del(&xwl_screen->cleanup_window_list);
 
-
     xorg_list_for_each_entry_safe(xwl_window, next_xwl_window,
              &tmp, link_cleanup) {
 
@@ -1060,11 +1064,9 @@ xwl_screen_post_damage(struct xwl_screen *xwl_screen)
     }
 
     xorg_list_for_each_entry_safe(xwl_window, next_xwl_window,
-                                  &xwl_screen->damage_window_list, link_damage) {
-        if(xwl_window->layout_is_dirty) {
-        	xwl_window->layout_is_dirty = 0;
-        	xwl_window_update_layout(xwl_window);
-        }
+                                  &xwl_screen->dirty_list, link_dirty) {
+    	xorg_list_del(&xwl_window->link_dirty);
+        xwl_window_update_layout(xwl_window);
     }
 
     //LogWrite(0, "process damages\n");
@@ -1308,6 +1310,7 @@ xwl_screen_init(ScreenPtr pScreen, int argc, char **argv)
     xorg_list_init(&xwl_screen->seat_list);
     xorg_list_init(&xwl_screen->damage_window_list);
     xorg_list_init(&xwl_screen->cleanup_window_list);
+    xorg_list_init(&xwl_screen->dirty_list);
 
     xwl_screen->clients_window_hash = ht_create(sizeof(XID), sizeof(void*), ht_resourceid_hash, ht_resourceid_compare, NULL);
     xwl_screen->depth = 24;

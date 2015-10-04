@@ -61,5 +61,7 @@ void xwl_window_send_focus_window(struct xwl_window *xwl_window);
 Bool xwl_window_is_maximized(struct xwl_window *window);
 void xwl_screen_setup_net_supported(struct xwl_screen *xwl_screen);
 void xwl_window_raise_with_childdren(struct xwl_window * xwl_window);
+void xwl_screen_dirty_layout_window(struct xwl_screen *xwl_screen, struct xwl_window *xwl_window);
+void xwl_window_dirty_layout(struct xwl_window *xwl_window);
 
 #endif /* HW_XWAYLAND_SERVER_SIDE_WM_H_ */

@@ -34,6 +34,7 @@
 #include <linux/input.h>
 
 #include "xwl_window.h"
+#include "frame.h"
 #include "cairo-util.h"
 
 enum frame_button_flags {
@@ -539,8 +540,8 @@ frame_refresh_geometry(struct frame *frame)
 }
 
 void
-frame_interior(struct frame *frame, uint32_t *x, uint32_t *y,
-		uint32_t *width, uint32_t *height)
+frame_interior(struct frame *frame, int32_t *x, int32_t *y,
+		int32_t *width, int32_t *height)
 {
 	frame_refresh_geometry(frame);
 
@@ -555,8 +556,8 @@ frame_interior(struct frame *frame, uint32_t *x, uint32_t *y,
 }
 
 void
-frame_input_rect(struct frame *frame, uint32_t *x, uint32_t *y,
-		 uint32_t *width, uint32_t *height)
+frame_input_rect(struct frame *frame, int32_t *x, int32_t *y,
+		 int32_t *width, int32_t *height)
 {
 	frame_refresh_geometry(frame);
 

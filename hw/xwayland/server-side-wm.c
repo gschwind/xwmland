@@ -25,6 +25,7 @@
 #include "property.h"
 #include "propertyst.h"
 
+
 #ifndef ARRAY_LENGTH
 #define ARRAY_LENGTH(a) (sizeof (a) / sizeof (a)[0])
 #endif
@@ -142,7 +143,7 @@ void xwl_screen_window_activate(struct xwl_screen *xwl_screen, struct xwl_window
 					True);
 		}
 		frame_set_flag(xwl_window->frame, FRAME_FLAG_ACTIVE);
-		xwl_window->layout_is_dirty = 1;
+		xwl_screen_dirty_layout_window(xwl_screen, xwl_window);
 	} else if (!xwl_window) {
 		XID value = None;
 
@@ -166,68 +167,104 @@ Bool xwl_window_is_maximized(struct xwl_window *window)
 	return window->maximized_horz && window->maximized_vert;
 }
 
+void xwl_screen_dirty_layout_window(struct xwl_screen *xwl_screen,
+		struct xwl_window *xwl_window) {
+	if(xorg_list_is_empty(&xwl_window->link_dirty)) {
+		xorg_list_add(&xwl_window->link_dirty, &xwl_screen->dirty_list);
+	}
+}
+
+void xwl_window_dirty_layout(struct xwl_window *xwl_window) {
+	xwl_screen_dirty_layout_window(xwl_window->xwl_screen, xwl_window);
+}
 
 void xwl_window_update_layout(struct xwl_window * xwl_window) {
     struct wl_region *region;
-    uint32_t x, y, w, h;
+    int32_t x, y, w, h;
     XID values[6];
 
-    if(!xwl_window->frame)
-    	return;
+    if(xwl_window->frame) {
 
-    frame_resize_inside(xwl_window->frame,
-    		xwl_window->client_window->drawable.width,
-			xwl_window->client_window->drawable.height);
+		frame_resize_inside(xwl_window->frame,
+				xwl_window->client_window->drawable.width,
+				xwl_window->client_window->drawable.height);
 
-	if(!xwl_window->has_32b_visual) {
-		DeviceIntPtr dev;
-		xEvent e;
+		if(!xwl_window->has_32b_visual) {
+			DeviceIntPtr dev;
+			xEvent e;
 
-		frame_interior(xwl_window->frame, &x, &y, &w, &h);
+			frame_interior(xwl_window->frame, &x, &y, &w, &h);
+			region = wl_compositor_create_region(xwl_window->xwl_screen->compositor);
+			wl_region_add(region, x, y, w, h);
+			wl_surface_set_opaque_region(xwl_window->surface, region);
+			wl_region_destroy(region);
+
+			values[0] = x;
+			values[1] = y;
+			values[2] = w;
+			values[3] = h;
+			ConfigureWindow(xwl_window->client_window, CWX|CWY|CWWidth|CWHeight, values, serverClient);
+
+			e.u.u.type = ConfigureNotify|0x80;
+			e.u.u.detail = 32;
+			e.u.configureNotify.window = xwl_window->client_window->drawable.id;
+			e.u.configureNotify.aboveSibling = None;
+			e.u.configureNotify.borderWidth = 0;
+			e.u.configureNotify.height = h;
+			e.u.configureNotify.width = w;
+			e.u.configureNotify.x = x;
+			e.u.configureNotify.y = y;
+			e.u.configureNotify.event = xwl_window->client_window->drawable.id;
+			e.u.configureNotify.override = FALSE;
+
+			dev = PickPointer(serverClient);
+			DeliverEventsToWindow(dev, xwl_window->client_window,
+								  &e, 1, StructureNotifyMask, NullGrab);
+
+		} else {
+			region = wl_compositor_create_region(xwl_window->xwl_screen->compositor);
+			wl_surface_set_opaque_region(xwl_window->surface, region);
+			wl_region_destroy(region);
+		}
+
+		frame_input_rect(xwl_window->frame, &x, &y, &w, &h);
 		region = wl_compositor_create_region(xwl_window->xwl_screen->compositor);
 		wl_region_add(region, x, y, w, h);
-		wl_surface_set_opaque_region(xwl_window->surface, region);
+		wl_surface_set_input_region(xwl_window->surface, region);
 		wl_region_destroy(region);
 
-		values[0] = x;
-		values[1] = y;
-		values[2] = w;
-		values[3] = h;
-		ConfigureWindow(xwl_window->client_window, CWX|CWY|CWWidth|CWHeight, values, serverClient);
+		xwl_window_draw_decoration(xwl_window);
+    } else {
 
-		e.u.u.type = ConfigureNotify|0x80;
-		e.u.u.detail = 32;
-		e.u.configureNotify.window = xwl_window->client_window->drawable.id;
-		e.u.configureNotify.aboveSibling = None;
-		e.u.configureNotify.borderWidth = 0;
-		e.u.configureNotify.height = h;
-		e.u.configureNotify.width = w;
-		e.u.configureNotify.x = x;
-		e.u.configureNotify.y = y;
-		e.u.configureNotify.event = xwl_window->client_window->drawable.id;
-		e.u.configureNotify.override = FALSE;
+        x = 0;
+        y = 0;
+        w = xwl_window->client_window->drawable.width;
+        h = xwl_window->client_window->drawable.height;
 
-		dev = PickPointer(serverClient);
-		DeliverEventsToWindow(dev, xwl_window->client_window,
-							  &e, 1, StructureNotifyMask, NullGrab);
-
-	} else {
 		region = wl_compositor_create_region(xwl_window->xwl_screen->compositor);
-		wl_surface_set_opaque_region(xwl_window->surface, region);
+		wl_region_add(region, x, y, w, h);
+		wl_surface_set_input_region(xwl_window->surface, region);
 		wl_region_destroy(region);
-	}
 
-	frame_input_rect(xwl_window->frame, &x, &y, &w, &h);
-	region = wl_compositor_create_region(xwl_window->xwl_screen->compositor);
-	wl_region_add(region, x, y, w, h);
-	wl_surface_set_input_region(xwl_window->surface, region);
-	wl_region_destroy(region);
+    }
 
+    if (xwl_window->below_me) {
+    	int parent_x, parent_y;
 
+	    if(xwl_window->below_me->frame_window) {
+	    	parent_x = xwl_window->below_me->frame_window->origin.x;
+	    	parent_y = xwl_window->below_me->frame_window->origin.y;
+	    } else {
+	    	parent_x = xwl_window->below_me->client_window->origin.x;
+	    	parent_y = xwl_window->below_me->client_window->origin.y;
+	    }
 
-	xwl_window_draw_decoration(xwl_window);
-
-
+		wl_shell_surface_set_transient(xwl_window->shell_surface,
+				xwl_window->below_me->surface,
+				xwl_window->client_window->origin.x - parent_x,
+				xwl_window->client_window->origin.y - parent_y,
+				0);
+    }
 
 }
 

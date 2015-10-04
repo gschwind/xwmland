@@ -310,7 +310,7 @@ pointer_handle_motion(void *data, struct wl_pointer *pointer,
 		location = frame_pointer_motion(window->frame, NULL,
 						sx, sy);
 		if (frame_status(window->frame) & FRAME_STATUS_REPAINT)
-			window->layout_is_dirty = 1;
+    		xwl_window_dirty_layout(window);
 
 		cursor = get_cursor_for_location(location);
 		//weston_wm_window_set_cursor(wm, window->frame_id, cursor);
@@ -376,7 +376,8 @@ pointer_handle_button(void *data, struct wl_pointer *pointer, uint32_t serial,
 			return;
 
 		if (frame_status(window->frame) & FRAME_STATUS_REPAINT)
-			window->layout_is_dirty = 1;
+    		xwl_window_dirty_layout(window);
+
 
 		if (frame_status(window->frame) & FRAME_STATUS_MOVE) {
 			if (pointer)
