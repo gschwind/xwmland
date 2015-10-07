@@ -50,7 +50,6 @@ struct xwl_screen {
     struct xorg_list output_list;
     struct xorg_list seat_list;
     struct xorg_list damage_window_list;
-    struct xorg_list cleanup_window_list;
     struct xorg_list dirty_list;
 
     HashTable clients_window_hash;
@@ -88,6 +87,8 @@ struct xwl_screen {
     struct window_manager * wm;
 
     struct xwl_window * net_active_window;
+
+    struct xwl_event_queue * event_queue;
 
 	VisualPtr visual;
 	Colormap colormap_id;

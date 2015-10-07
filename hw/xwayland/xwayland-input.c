@@ -360,8 +360,10 @@ pointer_handle_button(void *data, struct wl_pointer *pointer, uint32_t serial,
 		if(!window->frame_window)
 			return;
 
-		if(state)
-			xwl_window_send_focus_window(window);
+		if(state
+				&& window->xwl_screen->net_active_window != window
+				&& window->frame)
+			xwl_screen_window_activate(window->xwl_screen, window);
 
 		/* Make sure we're looking at the right location.  The frame
 		 * could have received a motion event from a pointer from a
@@ -983,6 +985,7 @@ InitInput(int argc, char *argv[])
     //RegisterBlockAndWakeupHandlers(xnestBlockHandler, xnestWakeupHandler, NULL);
 
     xwl_screen->wm = window_manager_create();
+    xwl_screen->event_queue = xwl_event_queue_new();
     xwl_screen->theme = theme_create();
 
     window_manager_get_resources(xwl_screen);

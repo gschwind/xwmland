@@ -40,6 +40,7 @@
 #include <exevents.h>
 #include <hashtable.h>
 
+#include "xwl_event.h"
 #include "xwl_screen.h"
 #include "xwl_window.h"
 

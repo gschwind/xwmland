@@ -56,6 +56,7 @@ struct xwl_window {
     struct xorg_list link_dirty;
     struct wl_callback *frame_callback;
 
+    int ignore_unmap;
     int has_32b_visual;
 	int properties_dirty;
 	int pid;

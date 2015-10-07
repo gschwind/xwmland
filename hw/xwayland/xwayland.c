@@ -40,6 +40,7 @@
 #include "window.h"
 #include "compint.h"
 
+#include "xwl_event.h"
 #include "client-side-wm.h"
 #include "server-side-wm.h"
 #include "xwm/hash.h"
@@ -536,51 +537,41 @@ xwl_clear_to_background(WindowPtr pWin, int x, int y, int w, int h, Bool generat
 
 }
 
-static Bool
-xwl_realize_window(WindowPtr window)
+static void
+xwl_screen_handle_map_event(struct xwl_screen *xwl_screen, Window window_id)
 {
-	ScreenPtr screen = window->drawable.pScreen;
-    struct xwl_screen *xwl_screen;
+	WindowPtr window;
     struct xwl_window *xwl_window;
 
-    Bool ret;
 	XID values[4];
 	int err = 0;
 	uint32_t x, y, w, h;
 	xGetWindowAttributesReply attr;
 	int buttons = FRAME_BUTTON_CLOSE;
 
-	LogWrite(0, "START xwl_realize_window %d (viewable:%s)\n", window->drawable.id, (window->viewable?"True":"False"));
+	LogWrite(0, "START xwl_handle_map_event 0x%x\n", window_id);
 
-	xwl_screen = xwl_screen_get(screen);
-
-    /* call legacy ReleazeWindow */
-    screen->RealizeWindow = xwl_screen->RealizeWindow;
-    ret = (*screen->RealizeWindow) (window);
-    xwl_screen->RealizeWindow = screen->RealizeWindow;
-    screen->RealizeWindow = xwl_realize_window;
-
-	if (xwl_screen->rootless && !window->parent) {
-		RegionNull(&window->clipList);
-		RegionNull(&window->borderClip);
-		RegionNull(&window->winSize);
+	err = dixLookupWindow(&window, window_id, serverClient, DixWriteAccess);
+	if(err) {
+		LogWrite(0, "END xwl_handle_map_event 0x%x (Window not found)\n", window_id);
+		return;
 	}
 
-    if(CLIENT_ID(window->drawable.id) == 0) {
+    if(CLIENT_ID(window_id) == 0) {
     	LogWrite(0, "END xwl_realize_window %d (Server Window)\n", window->drawable.id);
-    	return ret;
+    	return;
     }
 
-    if(window->parent != screen->root && window->parent != 0) {
+    if(window->parent != xwl_screen->screen->root && window->parent != 0) {
     	LogWrite(0, "END xwl_realize_window %d (Not child of root)\n", window->drawable.id);
-    	return ret;
+    	return;
     }
 
     xwl_window = xwl_screen_find_window(xwl_screen, window->drawable.id);
 
     if(xwl_window != NULL) {
     	LogWrite(0, "END xwl_realize_window %d (Window already managed)\n", window->drawable.id);
-    	return ret;
+    	return;
     }
 
 	GetWindowAttributes(window, serverClient, &attr);
@@ -590,7 +581,7 @@ xwl_realize_window(WindowPtr window)
 	/* do not try to manage InputOnly windows */
 	if(attr.class == InputOnly) {
 		LogWrite(0, "END xwl_realize_window %d (InputOnly)\n", window->drawable.id);
-		return ret;
+		return;
 	}
 
 	/* register this window */
@@ -625,7 +616,7 @@ xwl_realize_window(WindowPtr window)
 				window->drawable.height, buttons, xwl_window->name);
 
 		frame_resize_inside(xwl_window->frame, window->drawable.width, window->drawable.height);
-		frame_interior(xwl_window->frame, &x, &y, (uint32_t*)NULL, (uint32_t*)NULL);
+		frame_interior(xwl_window->frame, &x, &y, &w, &h);
 
 		xwl_window_dirty_layout(xwl_window);
 
@@ -638,8 +629,8 @@ xwl_realize_window(WindowPtr window)
 			colormap = xwl_screen->colormap_id;
 		}
 
-		values[0] = screen->blackPixel;
-		values[1] = screen->blackPixel;
+		values[0] = xwl_screen->screen->blackPixel;
+		values[1] = xwl_screen->screen->blackPixel;
 		values[2] = 0;
 		values[3] = colormap;
 
@@ -648,7 +639,7 @@ xwl_realize_window(WindowPtr window)
 				(int)xwl_screen->colormap->mid);
 
 
-		xwl_window->frame_window = CreateWindow(FakeClientID(0), screen->root,
+		xwl_window->frame_window = CreateWindow(FakeClientID(0), xwl_screen->screen->root,
 				0, 0,
 				frame_width(xwl_window->frame),
 				frame_height(xwl_window->frame),
@@ -692,6 +683,7 @@ xwl_realize_window(WindowPtr window)
 		wl_display_flush(xwl_screen->display);
 		wl_surface_set_user_data(xwl_window->surface, xwl_window);
 
+		LogWrite(0, "add windows to hash table\n");
 		xwl_screen_add_window(xwl_screen, window->drawable.id, xwl_window);
 		xwl_screen_add_window(xwl_screen, xwl_window->frame_window->drawable.id, xwl_window);
 		dixSetPrivate(&window->devPrivates, &xwl_window_private_key, xwl_window);
@@ -699,7 +691,7 @@ xwl_realize_window(WindowPtr window)
 		xwl_window->damage =
 			DamageCreate(damage_report,
 					damage_destroy, DamageReportNonEmpty,
-					FALSE, screen, xwl_window);
+					FALSE, xwl_screen->screen, xwl_window);
 		DamageRegister(&xwl_window->frame_window->drawable, xwl_window->damage);
 		DamageSetReportAfterOp(xwl_window->damage, TRUE);
 
@@ -742,7 +734,6 @@ xwl_realize_window(WindowPtr window)
 			struct xwl_window *window_iterator;
 
 			xwl_seat_found = NULL;
-
 
 			/**
 			 * Find the staking order, if more than ones transient for is found
@@ -845,13 +836,14 @@ xwl_realize_window(WindowPtr window)
 		wl_display_flush(xwl_screen->display);
 		wl_surface_set_user_data(xwl_window->surface, xwl_window);
 
+		LogWrite(0, "add windows to hash table\n");
 		xwl_screen_add_window(xwl_screen, window->drawable.id, xwl_window);
 		dixSetPrivate(&window->devPrivates, &xwl_window_private_key, xwl_window);
 
 		xwl_window->damage =
 			DamageCreate(damage_report,
 					damage_destroy, DamageReportNonEmpty,
-					FALSE, screen, xwl_window);
+					FALSE, xwl_screen->screen, xwl_window);
 		DamageRegister(&xwl_window->client_window->drawable, xwl_window->damage);
 		DamageSetReportAfterOp(xwl_window->damage, TRUE);
 
@@ -860,67 +852,397 @@ xwl_realize_window(WindowPtr window)
 	}
 
 	LogWrite(0, "END xwl_realize_window %d\n", window->drawable.id);
-    return ret;
 }
 
 
-//Bool xwl_create_window(WindowPtr pWin) {
-//
-//}
-//
-//Bool xwl_destroy_window(WindowPtr pWin) {
-//    ScreenPtr screen = window->drawable.pScreen;
-//    struct xwl_screen *xwl_screen;
-//    struct xwl_window *xwl_window;
-//    struct xwl_seat *xwl_seat;
-//    Bool ret;
-//
-//	LogWrite(0, "xwl_destroy_window %d (viewable:%s)\n", window->drawable.id, (window->viewable?"True":"False"));
-//
-//    xwl_screen = xwl_screen_get(screen);
-//
-//    if(xwl_screen->DestroyWindow) {
-//		screen->DestroyWindow = xwl_screen->DestroyWindow;
-//		ret = (*screen->DestroyWindow) (window);
-//		xwl_screen->DestroyWindow = screen->DestroyWindow;
-//		screen->DestroyWindow = xwl_destroy_window;
-//    }
-//
-//    xorg_list_for_each_entry(xwl_seat, &xwl_screen->seat_list, link) {
-//        if (xwl_seat->focus_window && xwl_seat->focus_window->client_window == window)
-//            xwl_seat->focus_window = NULL;
-//
-//        xwl_seat_clear_touch(xwl_seat, window);
-//    }
-//
-//    xwl_window =
-//        dixLookupPrivate(&window->devPrivates, &xwl_window_private_key);
-//    if (!xwl_window) {
-//        return ret;
-//    }
-//
-//    if(xwl_window->starting)
-//    	return ret;
-//
-//    xwl_screen_remove_window(xwl_screen, xwl_window->client_window->drawable.id);
-//    if(xwl_window->frame_window)
-//    	xwl_screen_remove_window(xwl_screen, xwl_window->frame_window->drawable.id);
-//
-//    if(xwl_window->frame)
-//    	frame_destroy(xwl_window->frame);
-//
-//    if(xwl_window->shell_surface)
-//    	wl_shell_surface_destroy(xwl_window->shell_surface);
-//
-//    if(!xorg_list_is_empty(&xwl_window->link_sibling)) {
-//    	xorg_list_del(&xwl_window->link_sibling);
-//    }
-//
-//    free(xwl_window);
-//    dixSetPrivate(&window->devPrivates, &xwl_window_private_key, NULL);
-//    return ret;
-//
-//}
+static Bool
+xwl_realize_window(WindowPtr window)
+{
+	ScreenPtr screen = window->drawable.pScreen;
+    struct xwl_screen *xwl_screen;
+    struct xwl_event *xwl_event;
+    Bool ret;
+
+	LogWrite(0, "START xwl_realize_window %d (viewable:%s)\n", window->drawable.id, (window->viewable?"True":"False"));
+
+	xwl_screen = xwl_screen_get(screen);
+
+    /* call legacy ReleazeWindow */
+    screen->RealizeWindow = xwl_screen->RealizeWindow;
+    ret = (*screen->RealizeWindow) (window);
+    xwl_screen->RealizeWindow = screen->RealizeWindow;
+    screen->RealizeWindow = xwl_realize_window;
+
+	if (xwl_screen->rootless && !window->parent) {
+		RegionNull(&window->clipList);
+		RegionNull(&window->borderClip);
+		RegionNull(&window->winSize);
+	}
+
+    if(CLIENT_ID(window->drawable.id) == 0) {
+    	LogWrite(0, "END xwl_realize_window %d (Server Window)\n", window->drawable.id);
+    	return ret;
+    }
+
+
+	WindowPtr window;
+    struct xwl_window *xwl_window;
+
+	XID values[4];
+	int err = 0;
+	uint32_t x, y, w, h;
+	xGetWindowAttributesReply attr;
+	int buttons = FRAME_BUTTON_CLOSE;
+
+	LogWrite(0, "START xwl_handle_map_event 0x%x\n", window_id);
+
+	err = dixLookupWindow(&window, window_id, serverClient, DixWriteAccess);
+	if(err) {
+		LogWrite(0, "END xwl_handle_map_event 0x%x (Window not found)\n", window_id);
+		return;
+	}
+
+    if(CLIENT_ID(window_id) == 0) {
+    	LogWrite(0, "END xwl_realize_window %d (Server Window)\n", window->drawable.id);
+    	return;
+    }
+
+    if(window->parent != xwl_screen->screen->root && window->parent != 0) {
+    	LogWrite(0, "END xwl_realize_window %d (Not child of root)\n", window->drawable.id);
+    	return;
+    }
+
+    xwl_window = xwl_screen_find_window(xwl_screen, window->drawable.id);
+
+    if(xwl_window != NULL) {
+    	LogWrite(0, "END xwl_realize_window %d (Window already managed)\n", window->drawable.id);
+    	return;
+    }
+
+	GetWindowAttributes(window, serverClient, &attr);
+
+	LogWrite(0, "Override = %d\n", attr.override);
+
+	/* do not try to manage InputOnly windows */
+	if(attr.class == InputOnly) {
+		LogWrite(0, "END xwl_realize_window %d (InputOnly)\n", window->drawable.id);
+		return;
+	}
+
+	/* register this window */
+	LogWrite(0, "create xwl_window for %d\n", window->drawable.id);
+	xwl_window = calloc(sizeof *xwl_window, 1);
+	xwl_window->xwl_screen = xwl_screen;
+	xwl_window->client_window = window;
+	xwl_window->surface = NULL;
+	xwl_window->shell_surface = NULL;
+	xwl_window->override_redirect = attr.override;
+
+	xorg_list_init(&(xwl_window->list_childdren));
+	xorg_list_init(&(xwl_window->link_sibling));
+	xorg_list_init(&(xwl_window->link_cleanup));
+	xorg_list_init(&(xwl_window->link_dirty));
+
+	if(!attr.override) {
+		DeviceIntPtr dev;
+		XID colormap;
+		XID visual;
+
+		xwl_window->properties_dirty = 1;
+		window_manager_window_read_properties(xwl_window);
+
+		LogWrite(0, "external client %d\n", window->drawable.id);
+
+		if (xwl_window->decorate & MWM_DECOR_MAXIMIZE)
+			buttons |= FRAME_BUTTON_MAXIMIZE;
+
+		xwl_window->frame = frame_create(xwl_screen->theme,
+				window->drawable.width,
+				window->drawable.height, buttons, xwl_window->name);
+
+		frame_resize_inside(xwl_window->frame, window->drawable.width, window->drawable.height);
+		frame_interior(xwl_window->frame, &x, &y, &w, &h);
+
+		xwl_window_dirty_layout(xwl_window);
+
+		xwl_window->has_32b_visual = visual_is_depth_32(xwl_screen, attr.visualID);
+		if(xwl_window->has_32b_visual) {
+			visual = attr.visualID;
+			colormap = attr.colormap;
+		} else {
+			visual = xwl_screen->visual->vid;
+			colormap = xwl_screen->colormap_id;
+		}
+
+		values[0] = xwl_screen->screen->blackPixel;
+		values[1] = xwl_screen->screen->blackPixel;
+		values[2] = 0;
+		values[3] = colormap;
+
+		LogWrite(0, "Class : %d, XID: %d\n",
+				(int)xwl_screen->colormap->class,
+				(int)xwl_screen->colormap->mid);
+
+
+		xwl_window->frame_window = CreateWindow(FakeClientID(0), xwl_screen->screen->root,
+				0, 0,
+				frame_width(xwl_window->frame),
+				frame_height(xwl_window->frame),
+				0, InputOutput,
+				CWBackPixel|CWBorderPixel|CWBorderWidth|CWColormap, values,
+				32, serverClient, visual, &err);
+
+		/* once a resource is created it should be added */
+		AddResource(xwl_window->frame_window->drawable.id, RT_WINDOW, (void*)xwl_window->frame_window);
+
+		LogWrite(0, "Frame = %p, err = %d\n", xwl_window->frame_window, err);
+
+		values[0] = 0;
+		ConfigureWindow(xwl_window->client_window, CWBorderWidth, values, serverClient);
+		ReparentWindow(window, xwl_window->frame_window, x, y, serverClient);
+		MapWindow(window, serverClient);
+		MapWindow(xwl_window->frame_window, serverClient);
+
+		dev = PickKeyboard(serverClient);
+		SetInputFocus(serverClient, dev, xwl_window->client_window->drawable.id, RevertToNone, 0, 0);
+
+		LogWrite(0, "internal window %d\n", window->drawable.id);
+
+		/** Immediately redirect this window **/
+		compRedirectWindow(serverClient, xwl_window->frame_window, CompositeRedirectManual);
+
+		window_manager_window_set_wm_state(xwl_window, ICCCM_NORMAL_STATE);
+		window_manager_window_set_net_wm_state(xwl_window);
+		window_manager_window_set_virtual_desktop(xwl_window, 0);
+
+		xwl_window->surface = wl_compositor_create_surface(xwl_screen->compositor);
+		wl_surface_add_listener(xwl_window->surface, &surface_listener, xwl_window);
+		xwl_window->shell_surface = wl_shell_get_shell_surface(xwl_screen->shell, xwl_window->surface);
+		wl_shell_surface_add_listener(xwl_window->shell_surface, &shell_surface_listener, xwl_window);
+
+		wl_shell_surface_set_toplevel(xwl_window->shell_surface);
+
+		if(xwl_window->name)
+			wl_shell_surface_set_title(xwl_window->shell_surface, xwl_window->name);
+
+		wl_display_flush(xwl_screen->display);
+		wl_surface_set_user_data(xwl_window->surface, xwl_window);
+
+		LogWrite(0, "add windows to hash table\n");
+		xwl_screen_add_window(xwl_screen, window->drawable.id, xwl_window);
+		xwl_screen_add_window(xwl_screen, xwl_window->frame_window->drawable.id, xwl_window);
+		dixSetPrivate(&window->devPrivates, &xwl_window_private_key, xwl_window);
+
+		xwl_window->damage =
+			DamageCreate(damage_report,
+					damage_destroy, DamageReportNonEmpty,
+					FALSE, xwl_screen->screen, xwl_window);
+		DamageRegister(&xwl_window->frame_window->drawable, xwl_window->damage);
+		DamageSetReportAfterOp(xwl_window->damage, TRUE);
+
+		xorg_list_init(&xwl_window->link_damage);
+
+		xwl_screen_window_activate(xwl_screen, xwl_window);
+
+	} else {
+
+		xwl_window->properties_dirty = 1;
+		window_manager_window_read_properties(xwl_window);
+		LogWrite(0, "Transient for %p\n", xwl_window->transient_for);
+
+		MapWindow(window, serverClient);
+
+		xwl_window->frame = NULL;
+		xwl_window->frame_window = NULL;
+
+		MapWindow(xwl_window->client_window, serverClient);
+
+		LogWrite(0, "internal window %d\n", window->drawable.id);
+
+		/** Immediately redirect this window **/
+		compRedirectWindow(serverClient, xwl_window->client_window, CompositeRedirectManual);
+
+		window_manager_window_set_wm_state(xwl_window, ICCCM_NORMAL_STATE);
+		window_manager_window_set_net_wm_state(xwl_window);
+		window_manager_window_set_virtual_desktop(xwl_window, 0);
+
+		xwl_window->surface = wl_compositor_create_surface(xwl_screen->compositor);
+		wl_surface_add_listener(xwl_window->surface, &surface_listener, xwl_window);
+
+		xwl_window->shell_surface = wl_shell_get_shell_surface(xwl_screen->shell, xwl_window->surface);
+		wl_shell_surface_add_listener(xwl_window->shell_surface, &shell_surface_listener, xwl_window);
+
+		if(xwl_window->transient_for) {
+			struct xwl_seat * xwl_seat_found;
+			struct xwl_seat * seat_iterator;
+			int parent_x, parent_y;
+			struct xwl_window *window_iterator;
+
+			xwl_seat_found = NULL;
+
+			/**
+			 * Find the staking order, if more than ones transient for is found
+			 * The current window goes on top of the last one. Else the window
+			 * will be above the transient for.
+			 **/
+			xwl_window->below_me = NULL;
+
+			xorg_list_for_each_entry(window_iterator, &(xwl_window->transient_for->list_childdren), link_sibling) {
+				/* if this is a not managed window, go above it */
+				if(!window_iterator->frame) {
+					xwl_window->below_me = window_iterator;
+					break;
+				}
+			}
+
+			/* if below still unset, go above transient_for */
+			if(!xwl_window->below_me) {
+				xwl_window->below_me = xwl_window->transient_for;
+			}
+
+			/** add current window to the sibling list */
+			xorg_list_add(&(xwl_window->link_sibling), &(xwl_window->transient_for->list_childdren));
+
+		    xorg_list_for_each_entry(seat_iterator, &xwl_screen->seat_list, link) {
+		    	if((seat_iterator->focus_window == xwl_window->transient_for)
+		    		|| (seat_iterator->focus_window == xwl_window->below_me)) {
+		    		xwl_seat_found = seat_iterator;
+		    		break;
+		    	}
+		    }
+
+		    if(xwl_window->below_me->frame_window) {
+		    	parent_x = xwl_window->below_me->frame_window->origin.x;
+		    	parent_y = xwl_window->below_me->frame_window->origin.y;
+		    } else {
+		    	parent_x = xwl_window->below_me->client_window->origin.x;
+		    	parent_y = xwl_window->below_me->client_window->origin.y;
+		    }
+
+		    if(xwl_seat_found) {
+//		    	wl_shell_surface_set_popup(xwl_window->shell_surface,
+//		    			xwl_seat_found->seat,
+//						xwl_seat_found->pointer_enter_serial,
+//						xwl_window->transient_for->surface,
+//						xwl_window->client_window->origin.x - parent_x,
+//						xwl_window->client_window->origin.y - parent_y,
+//						0);
+		    	wl_shell_surface_set_transient(xwl_window->shell_surface,
+		    			xwl_window->below_me->surface,
+		    			xwl_window->client_window->origin.x - parent_x,
+		    			xwl_window->client_window->origin.y - parent_y,
+		    			0);
+		    } else {
+		    	wl_shell_surface_set_transient(xwl_window->shell_surface,
+		    			xwl_window->below_me->surface,
+		    			xwl_window->client_window->origin.x - parent_x,
+		    			xwl_window->client_window->origin.y - parent_y,
+		    			0);
+		    }
+		} else {
+			int parent_x, parent_y;
+			/**
+			 * if transient_for is not set, we guess this window is a child of
+			 * the window under the cursor, if this last window belong to the same
+			 * X11 client.
+			 */
+			struct xwl_seat *seat = xorg_list_first_entry(&(xwl_screen->seat_list), struct xwl_seat, link);
+
+			if(seat->focus_window != NULL) {
+			if(CLIENT_ID(seat->focus_window->client_window->drawable.id)
+					== CLIENT_ID(xwl_window->client_window->drawable.id)) {
+
+			    if(seat->focus_window->frame_window) {
+			    	parent_x = seat->focus_window->frame_window->origin.x;
+			    	parent_y = seat->focus_window->frame_window->origin.y;
+			    } else {
+			    	parent_x = seat->focus_window->client_window->origin.x;
+			    	parent_y = seat->focus_window->client_window->origin.y;
+			    }
+
+				wl_shell_surface_set_transient(xwl_window->shell_surface,
+						seat->focus_window->surface,
+		    			xwl_window->client_window->origin.x - parent_x,
+		    			xwl_window->client_window->origin.y - parent_y,
+		    			0);
+
+			} else {
+				wl_shell_surface_set_toplevel(xwl_window->shell_surface);
+			}
+
+			} else {
+				wl_shell_surface_set_toplevel(xwl_window->shell_surface);
+			}
+		}
+
+		if(xwl_window->name)
+			wl_shell_surface_set_title(xwl_window->shell_surface, xwl_window->name);
+
+		wl_display_flush(xwl_screen->display);
+		wl_surface_set_user_data(xwl_window->surface, xwl_window);
+
+		LogWrite(0, "add windows to hash table\n");
+		xwl_screen_add_window(xwl_screen, window->drawable.id, xwl_window);
+		dixSetPrivate(&window->devPrivates, &xwl_window_private_key, xwl_window);
+
+		xwl_window->damage =
+			DamageCreate(damage_report,
+					damage_destroy, DamageReportNonEmpty,
+					FALSE, xwl_screen->screen, xwl_window);
+		DamageRegister(&xwl_window->client_window->drawable, xwl_window->damage);
+		DamageSetReportAfterOp(xwl_window->damage, TRUE);
+
+		xorg_list_init(&xwl_window->link_damage);
+
+	}
+
+	LogWrite(0, "END xwl_realize_window %d\n", window->drawable.id);
+
+
+    /** handle realize later **/
+    xwl_event = xwl_event_new();
+    xwl_event->type = XWL_EVENT_MAP;
+    xwl_event->data.map.window = window->drawable.id;
+    xwl_event_queue_append(xwl_screen->event_queue, xwl_event);
+
+	LogWrite(0, "END xwl_realize_window %d\n", window->drawable.id);
+    return ret;
+}
+
+static void
+xwl_screen_handle_unmap_window(struct xwl_screen *xwl_screen, struct xwl_window *xwl_window)
+{
+	WindowPtr child_iterator;
+    struct xwl_seat *xwl_seat;
+    int err;
+
+	LogWrite(0, "xwl_screen_handle_unmap_window\n");
+
+    if(!xorg_list_is_empty(&xwl_window->link_sibling)) {
+    	xorg_list_del(&xwl_window->link_sibling);
+    }
+
+    if(!xorg_list_is_empty(&xwl_window->link_dirty)) {
+    	xorg_list_del(&xwl_window->link_dirty);
+    }
+
+	xorg_list_del(&xwl_window->link_cleanup);
+	UnmapWindow(xwl_window->frame_window, FALSE);
+
+	/* remove all children before deleting the window */
+	child_iterator = xwl_window->frame_window->firstChild;
+	while(child_iterator) {
+		WindowPtr next_iterator = child_iterator->nextSib;
+		ReparentWindow(child_iterator, xwl_screen->screen->root, 0, 0, serverClient);
+		child_iterator = next_iterator;
+	}
+
+    DeleteWindow(xwl_window->frame_window, xwl_window->frame_window->drawable.id);
+    if(xwl_window->frame)
+    	frame_destroy(xwl_window->frame);
+	free(xwl_window);
+
+}
 
 static Bool
 xwl_unrealize_window(WindowPtr window)
@@ -929,6 +1251,7 @@ xwl_unrealize_window(WindowPtr window)
     struct xwl_screen *xwl_screen;
     struct xwl_window *xwl_window;
     struct xwl_seat *xwl_seat;
+    struct xwl_event *xwl_event;
     Bool ret;
 
 	LogWrite(0, "START xwl_unrealize_window %d (viewable:%s)\n", window->drawable.id, (window->viewable?"True":"False"));
@@ -967,14 +1290,6 @@ xwl_unrealize_window(WindowPtr window)
     if(xwl_window->shell_surface)
     	wl_shell_surface_destroy(xwl_window->shell_surface);
 
-    if(!xorg_list_is_empty(&xwl_window->link_sibling)) {
-    	xorg_list_del(&xwl_window->link_sibling);
-    }
-
-    if(!xorg_list_is_empty(&xwl_window->link_dirty)) {
-    	xorg_list_del(&xwl_window->link_dirty);
-    }
-
     if (RegionNotEmpty(DamageRegion(xwl_window->damage)))
         xorg_list_del(&xwl_window->link_damage);
     DamageUnregister(xwl_window->damage);
@@ -986,26 +1301,18 @@ xwl_unrealize_window(WindowPtr window)
 
     wl_display_flush(xwl_screen->display);
 
-    if(xwl_window->frame_window) {
-    	xorg_list_add(&xwl_window->link_cleanup, &xwl_screen->cleanup_window_list);
-		//compUnredirectWindow(serverClient, xwl_window->frame_window, CompositeRedirectManual);
-    	//UnmapWindow(xwl_window->frame_window, FALSE);
-        //ReparentWindow(xwl_window->client_window, xwl_screen->screen->root, 0, 0, serverClient);
-        //DeleteWindow(xwl_window->frame_window, xwl_window->frame_window->drawable.id);
-        //if(xwl_window->frame)
-        //	frame_destroy(xwl_window->frame);
-    } else {
-    	//compUnredirectWindow(serverClient, xwl_window->client_window, CompositeRedirectManual);
-        free(xwl_window);
-    }
-
-	LogWrite(0, "END xwl_unrealize_window %d (viewable:%s) (Finish normaly)\n", window->drawable.id, (window->viewable?"True":"False"));
+    xwl_event = xwl_event_new();
+    xwl_event->type = XWL_EVENT_UNMAP;
+    xwl_event->data.unmap.window = xwl_window;
+    xwl_event_queue_append(xwl_screen->event_queue, xwl_event);
 
 finish:
     screen->UnrealizeWindow = xwl_screen->UnrealizeWindow;
     ret = (*screen->UnrealizeWindow) (window);
     xwl_screen->UnrealizeWindow = screen->UnrealizeWindow;
     screen->UnrealizeWindow = xwl_unrealize_window;
+
+	LogWrite(0, "END xwl_unrealize_window %d (viewable:%s) (Finish normaly)\n", window->drawable.id, (window->viewable?"True":"False"));
 	return ret;
 }
 
@@ -1038,30 +1345,23 @@ xwl_screen_post_damage(struct xwl_screen *xwl_screen)
     PixmapPtr pixmap;
     WindowPtr child_iterator;
     struct xorg_list tmp;
+    struct xwl_event *event;
 
-    /* copy the the list and clear old one to be re-entrant */
-    xorg_list_add(&tmp, &xwl_screen->cleanup_window_list);
-    xorg_list_del(&xwl_screen->cleanup_window_list);
-
-    xorg_list_for_each_entry_safe(xwl_window, next_xwl_window,
-             &tmp, link_cleanup) {
-
-    	xorg_list_del(&xwl_window->link_cleanup);
-    	UnmapWindow(xwl_window->frame_window, FALSE);
-
-    	/* remove all children before deleting the window */
-    	child_iterator = xwl_window->frame_window->firstChild;
-    	while(child_iterator) {
-    		WindowPtr next_iterator = child_iterator->nextSib;
-    		ReparentWindow(child_iterator, xwl_screen->screen->root, 0, 0, serverClient);
-    		child_iterator = next_iterator;
+    while((event = xwl_event_queue_pop(xwl_screen->event_queue)) != NULL) {
+    	switch(event->type) {
+    	case XWL_EVENT_MAP:
+    		xwl_screen_handle_map_event(xwl_screen, event->data.map.window);
+    		break;
+    	case XWL_EVENT_UNMAP:
+    		xwl_screen_handle_unmap_window(xwl_screen, event->data.unmap.window);
+    		break;
+    	default:
+    		break;
     	}
 
-        DeleteWindow(xwl_window->frame_window, xwl_window->frame_window->drawable.id);
-        if(xwl_window->frame)
-        	frame_destroy(xwl_window->frame);
-    	free(xwl_window);
+    	xwl_event_free(event);
     }
+
 
     xorg_list_for_each_entry_safe(xwl_window, next_xwl_window,
                                   &xwl_screen->dirty_list, link_dirty) {
@@ -1309,7 +1609,6 @@ xwl_screen_init(ScreenPtr pScreen, int argc, char **argv)
     xorg_list_init(&xwl_screen->output_list);
     xorg_list_init(&xwl_screen->seat_list);
     xorg_list_init(&xwl_screen->damage_window_list);
-    xorg_list_init(&xwl_screen->cleanup_window_list);
     xorg_list_init(&xwl_screen->dirty_list);
 
     xwl_screen->clients_window_hash = ht_create(sizeof(XID), sizeof(void*), ht_resourceid_hash, ht_resourceid_compare, NULL);
