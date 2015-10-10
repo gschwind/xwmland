@@ -18,6 +18,7 @@ Xwayland_SOURCES =				\
 	xwm/hash.c				\
 	frame.c				\
 	cairo-util.c				\
+	xwl_window.c				\
 	server-side-wm.c			\
 	client-side-wm.c			\
 	xwayland.c				\

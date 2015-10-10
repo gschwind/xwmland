@@ -111,7 +111,7 @@ void xwl_window_raise_with_childdren(struct xwl_window * xwl_window) {
 	if(xwl_window->frame_window) {
 		ConfigureWindow(xwl_window->frame_window, CWStackMode, &values, serverClient);
 	} else {
-		ConfigureWindow(xwl_window->client_window, CWStackMode, &values, serverClient);
+		//ConfigureWindow(xwl_window->client_window, CWStackMode, &values, serverClient);
 	}
 
 	xorg_list_for_each_entry(iterator, &(xwl_window->list_childdren), link_sibling) {
@@ -143,7 +143,7 @@ void xwl_screen_window_activate(struct xwl_screen *xwl_screen, struct xwl_window
 					True);
 		}
 		frame_set_flag(xwl_window->frame, FRAME_FLAG_ACTIVE);
-		xwl_screen_dirty_layout_window(xwl_screen, xwl_window);
+		xwl_screen_window_need_update(xwl_screen, xwl_window);
 	} else if (!xwl_window) {
 		XID value = None;
 
@@ -167,15 +167,16 @@ Bool xwl_window_is_maximized(struct xwl_window *window)
 	return window->maximized_horz && window->maximized_vert;
 }
 
-void xwl_screen_dirty_layout_window(struct xwl_screen *xwl_screen,
+void xwl_screen_window_need_update(struct xwl_screen *xwl_screen,
 		struct xwl_window *xwl_window) {
-	if(xorg_list_is_empty(&xwl_window->link_dirty)) {
-		xorg_list_add(&xwl_window->link_dirty, &xwl_screen->dirty_list);
+	if(xorg_list_is_empty(&xwl_window->link_update)) {
+		xorg_list_append(&xwl_window->link_update, &xwl_screen->need_update_list);
 	}
 }
 
 void xwl_window_dirty_layout(struct xwl_window *xwl_window) {
-	xwl_screen_dirty_layout_window(xwl_window->xwl_screen, xwl_window);
+	xwl_window_update_set_flags(xwl_window, XWL_WINDOW_LAYOUT_IS_DIRTY);
+	xwl_screen_window_need_update(xwl_window->xwl_screen, xwl_window);
 }
 
 void xwl_window_update_layout(struct xwl_window * xwl_window) {
@@ -184,6 +185,8 @@ void xwl_window_update_layout(struct xwl_window * xwl_window) {
     XID values[6];
 
     if(xwl_window->frame) {
+    	BoxRec box;
+    	RegionPtr xregion;
 
 		frame_resize_inside(xwl_window->frame,
 				xwl_window->client_window->drawable.width,
@@ -204,6 +207,7 @@ void xwl_window_update_layout(struct xwl_window * xwl_window) {
 			values[2] = w;
 			values[3] = h;
 			ConfigureWindow(xwl_window->client_window, CWX|CWY|CWWidth|CWHeight, values, serverClient);
+			LogWrite(0, "ConfigureWindow (%d,%d,%d,%d)\n", x, y, w, h);
 
 			e.u.u.type = ConfigureNotify|0x80;
 			e.u.u.detail = 32;
@@ -233,8 +237,16 @@ void xwl_window_update_layout(struct xwl_window * xwl_window) {
 		wl_surface_set_input_region(xwl_window->surface, region);
 		wl_region_destroy(region);
 
+		xregion = RegionCreate(&box, 1);
+		DamageRegionAppend(&xwl_window->frame_window->drawable, xregion);
+		RegionDestroy(xregion);
+
+		xwl_window_update_set_flags(xwl_window, XWL_WINDOW_HAS_DAMAGES);
+
 		xwl_window_draw_decoration(xwl_window);
     } else {
+    	BoxRec box;
+    	RegionPtr xregion;
 
         x = 0;
         y = 0;
@@ -245,6 +257,17 @@ void xwl_window_update_layout(struct xwl_window * xwl_window) {
 		wl_region_add(region, x, y, w, h);
 		wl_surface_set_input_region(xwl_window->surface, region);
 		wl_region_destroy(region);
+
+		box.x1 = 0;
+		box.x2 = w;
+		box.y1 = 0;
+		box.y2 = h;
+
+		xregion = RegionCreate(&box, 1);
+		DamageRegionAppend(&xwl_window->frame_window->drawable, xregion);
+		RegionDestroy(xregion);
+
+		xwl_window_update_set_flags(xwl_window, XWL_WINDOW_HAS_DAMAGES);
 
     }
 
@@ -303,6 +326,8 @@ xwl_window_draw_decoration(struct xwl_window *xwl_window) {
 	GCPtr gc;
 	XID gcid;
 	char * data;
+
+	LogWrite(0, "xwl_window_draw_decoration\n");
 
 	if(xwl_window->frame_window == NULL || xwl_window->frame == NULL) {
 		LogWrite(0, "unexpected call of xwl_window_draw_decoration\n");

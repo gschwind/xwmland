@@ -8,11 +8,20 @@
 #ifndef HW_XWAYLAND_XWL_WINDOW_H_
 #define HW_XWAYLAND_XWL_WINDOW_H_
 
-#include "list.h"
-#include "window.h"
-#include "damage.h"
+#include <dix-config.h>
+#include <stdint.h>
+#include <pthread.h>
+#include <dix.h>
+#include <fb.h>
 
 struct xwl_screen;
+
+#define XWL_WINDOW_NEW_WINDOW        (1U << 0)
+#define XWL_WINDOW_LAYOUT_IS_DIRTY   (1U << 1)
+#define XWL_WINDOW_NEED_CLEANUP      (1U << 2)
+#define XWL_WINDOW_HAS_DAMAGES       (1U << 3)
+#define XWL_WINDOW_IGNORE_UNREALIZE  (1U << 4)
+#define XWL_WINDOW_UNREALIZED        (1U << 5)
 
 struct wm_size_hints {
 	uint32_t flags;
@@ -38,7 +47,8 @@ struct motif_wm_hints {
 };
 
 struct xwl_window {
-	pthread_mutex_t lock;
+	Window xid;
+
     struct xwl_screen *xwl_screen;
     struct wl_surface *surface;
     struct wl_shell_surface *shell_surface;
@@ -50,12 +60,10 @@ struct xwl_window {
 
     WindowPtr client_window;
     DamagePtr damage;
-    struct xorg_list link_damage;
-    struct xorg_list link_window;
-    struct xorg_list link_cleanup;
-    struct xorg_list link_dirty;
+    struct xorg_list link_update;
     struct wl_callback *frame_callback;
 
+    uint32_t state_flags;
     int has_32b_visual;
 	int properties_dirty;
 	int pid;
@@ -81,6 +89,8 @@ struct xwl_window {
 
 };
 
+void xwl_window_update_set_flags(struct xwl_window *w, uint32_t flag);
+void xwl_window_update_unset_flags(struct xwl_window *w, uint32_t flag);
 
 
 #endif /* HW_XWAYLAND_XWL_WINDOW_H_ */

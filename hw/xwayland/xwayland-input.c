@@ -251,6 +251,11 @@ pointer_handle_enter(void *data, struct wl_pointer *pointer,
     for (i = 0; i < dev->button->numButtons; i++)
         if (BitIsOn(dev->button->down, i))
             QueuePointerEvents(dev, ButtonRelease, i, 0, &mask);
+
+    LogWrite(0, "pointer_handle_enter\n");
+    if(xwl_seat->focus_window)
+    	xwl_window_raise_with_childdren(xwl_seat->focus_window);
+
 }
 
 static void
